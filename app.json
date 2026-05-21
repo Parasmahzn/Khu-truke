@@ -2,6 +2,7 @@
   "expo": {
     "name": "Khu₹truke",
     "slug": "khutruke",
+    "scheme": "khutruke",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -24,7 +25,8 @@
     },
     "plugins": [
       "expo-font",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-router"
     ],
     "extra": {
       "eas": {

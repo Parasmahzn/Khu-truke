@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useColors } from '../ThemeContext';
+import { useColors } from '../context/ThemeContext';
 import type { Colors } from '../theme';
 
 type ScreenHeaderProps = { title: string; right?: React.ReactNode };

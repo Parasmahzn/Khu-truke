@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
   TextInput, Alert, Modal, Image,
@@ -7,24 +7,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import Logo from '../components/Logo';
 import Chip from '../components/Chip';
-import { ExpenseContext } from '../store';
+import { useAppStore } from '../store';
 import { BUILT_IN_CATEGORIES, COMMON_TAGS, EMOJI_SUGGESTIONS } from '../constants';
-import { useColors } from '../ThemeContext';
+import { useColors } from '../context/ThemeContext';
 import { RADIUS } from '../theme';
 import type { Colors } from '../theme';
-import type { RootStackScreenProps } from '../navigation/types';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 
-
-type Props = RootStackScreenProps<'AddEdit'>;
-
-export default function AddEditScreen({ navigation, route }: Props) {
+export default function AddEditScreen() {
   const insets = useSafeAreaInsets();
   const C = useColors();
   const styles = useMemo(() => makeStyles(C), [C]);
-  const { addExpense, updateExpense, deleteExpense, currency, customCategories, addCustomCategory } = useContext(ExpenseContext);
+  const router = useRouter();
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { expenses, addExpense, updateExpense, deleteExpense, currency, customCategories, addCustomCategory } = useAppStore();
 
-  const raw = route.params?.expense;
-  const existing = (raw && typeof raw.amount === 'number' && raw.id) ? raw : null;
+  const existing = id ? (expenses.find((e) => e.id === id) ?? null) : null;
   const isEdit = !!existing;
 
   const allCategories = [...BUILT_IN_CATEGORIES, ...customCategories];
@@ -112,14 +110,14 @@ export default function AddEditScreen({ navigation, route }: Props) {
     };
     if (isEdit) updateExpense(existing.id, payload);
     else addExpense(payload);
-    navigation.goBack();
+    router.back();
   };
 
   const onDelete = () => {
     if (!existing) return;
     Alert.alert('Delete expense?', 'This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => { deleteExpense(existing.id); navigation.goBack(); } },
+      { text: 'Delete', style: 'destructive', onPress: () => { deleteExpense(existing.id); router.back(); } },
     ]);
   };
 
@@ -146,7 +144,7 @@ export default function AddEditScreen({ navigation, route }: Props) {
   return (
     <View style={{ flex: 1, backgroundColor: C.paper }}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable onPress={() => navigation.goBack()}><Text style={styles.cancel}>✕ cancel</Text></Pressable>
+        <Pressable onPress={() => router.back()}><Text style={styles.cancel}>✕ cancel</Text></Pressable>
         <View style={styles.logoGroup}>
           <Logo size={44} />
           <View style={{ marginLeft: 10 }}>

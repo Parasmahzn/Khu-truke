@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Logo from '../components/Logo';
-import { useColors } from '../ThemeContext';
+import { useColors } from '../context/ThemeContext';
 import type { Colors } from '../theme';
 
 type OnboardingScreenProps = { onDone: () => void };

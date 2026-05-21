@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useColors } from '../ThemeContext';
+import { useColors } from '../context/ThemeContext';
 import type { Colors } from '../theme';
 
 type LogoProps = { size?: number };

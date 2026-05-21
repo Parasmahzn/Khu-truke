@@ -1,25 +1,20 @@
-import React, { useContext, useMemo, useState, useRef, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Modal, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
-import { ExpenseContext } from '../store';
+import { useAppStore } from '../store';
 import type { Category } from '../store';
 import { CURRENCIES, BUILT_IN_CATEGORIES, EMOJI_SUGGESTIONS } from '../constants';
-import { useColors } from '../ThemeContext';
+import { useColors } from '../context/ThemeContext';
 import { RADIUS } from '../theme';
 import type { Colors } from '../theme';
-import type { RootStackScreenProps } from '../navigation/types';
-
-
-type Props = RootStackScreenProps<'Settings'>;
-
-export default function SettingsScreen({ navigation: _navigation }: Props) {
+export default function SettingsScreen() {
   const C = useColors();
   const styles = useMemo(() => makeStyles(C), [C]);
   const {
     customCategories, addCustomCategory, removeCustomCategory,
     currency, expenses, clearExpensesForCurrency, clearBudgetForCurrency, countExpensesForCurrency,
-  } = useContext(ExpenseContext);
+  } = useAppStore();
 
   const [addCatOpen, setAddCatOpen] = useState(false);
   const [newCatEmoji, setNewCatEmoji] = useState('');

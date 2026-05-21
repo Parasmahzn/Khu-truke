@@ -1,9 +1,10 @@
-import React, { useContext, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, Platform } from 'react-native';
 import { PieChart } from 'react-native-chart-kit';
 import ScreenHeader from '../components/ScreenHeader';
-import { useColors } from '../ThemeContext';
-import { ExpenseContext, expensesInMonth, sumAmount, byCategory, formatMoney } from '../store';
+import { useColors } from '../context/ThemeContext';
+import { useAppStore } from '../store';
+import { expensesInMonth, sumAmount, byCategory, formatMoney } from '../utils/expenses';
 import { CATEGORY_COLORS } from '../constants';
 import type { Colors } from '../theme';
 
@@ -12,7 +13,7 @@ const { width } = Dimensions.get('window');
 export default function AnalyticsScreen() {
   const C = useColors();
   const styles = useMemo(() => makeStyles(C), [C]);
-  const { expenses, currency } = useContext(ExpenseContext);
+  const { expenses, currency } = useAppStore();
   const now = new Date();
 
   const monthList = useMemo(() => expensesInMonth(expenses, now.getFullYear(), now.getMonth()), [expenses]);

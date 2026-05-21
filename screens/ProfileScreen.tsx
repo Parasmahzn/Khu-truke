@@ -1,17 +1,15 @@
-import React, { useContext, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Switch, Alert, Image, Modal, TextInput, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
 import Chip from '../components/Chip';
-import { ExpenseContext, formatMoney } from '../store';
+import { useAppStore } from '../store';
+import { formatMoney } from '../utils/expenses';
 import { CURRENCIES } from '../constants';
-import { useColors, useTheme } from '../ThemeContext';
-import { CommonActions } from '@react-navigation/native';
+import { useColors, useTheme } from '../context/ThemeContext';
+import { useRouter } from 'expo-router';
 import type { Colors } from '../theme';
-import type { TabScreenProps } from '../navigation/types';
-
-type Props = TabScreenProps<'Profile'>;
 
 const makeStyles = (C: Colors) => StyleSheet.create({
   avatarRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginTop: 20 },
@@ -124,11 +122,12 @@ function Row({ icon, label, value, right, last, onPress, styles, C }: RowProps) 
   );
 }
 
-export default function ProfileScreen({ navigation }: Props) {
+export default function ProfileScreen() {
+  const router = useRouter();
   const C = useColors();
   const styles = useMemo(() => makeStyles(C), [C]);
   const { isDark, toggleDark } = useTheme();
-  const { expenses, userName, profileImage, saveProfileImage, budget, saveBudget, currency, saveCurrency } = useContext(ExpenseContext);
+  const { expenses, userName, profileImage, saveProfileImage, budget, saveBudget, currency, saveCurrency } = useAppStore();
   const avatarLetter = userName ? userName[0].toUpperCase() : '?';
   const [notif, setNotif] = useState(true);
   const [currencyOpen, setCurrencyOpen] = useState(false);
@@ -179,7 +178,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const onLogout = () => {
     Alert.alert('Go to welcome screen?', 'Your data will be kept safe.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Continue', onPress: () => { navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Onboarding' }] })); } },
+      { text: 'Continue', onPress: () => { router.replace('/(auth)/onboarding'); } },
     ]);
   };
 
@@ -225,7 +224,7 @@ export default function ProfileScreen({ navigation }: Props) {
 
         <Text style={styles.label}>SETTINGS</Text>
         <View style={styles.listCard}>
-          <Row icon="settings-outline" label="Manage categories" onPress={() => navigation.navigate('Settings')} styles={styles} C={C} />
+          <Row icon="settings-outline" label="Manage categories" onPress={() => router.push('/settings')} styles={styles} C={C} />
         </View>
 
         <Text style={styles.label}>PREFERENCES</Text>

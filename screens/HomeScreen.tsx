@@ -1,19 +1,19 @@
-import React, { useContext, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ExpenseContext, sumAmount, expensesInMonth, expensesOn, formatMoney } from '../store';
-import { useColors } from '../ThemeContext';
+import { useAppStore } from '../store';
+import { sumAmount, expensesInMonth, expensesOn, formatMoney } from '../utils/expenses';
+import { useColors } from '../context/ThemeContext';
 import StatCard from '../components/StatCard';
 import type { Colors } from '../theme';
-import type { TabScreenProps } from '../navigation/types';
+import { useRouter } from 'expo-router';
 
-type Props = TabScreenProps<'Home'>;
-
-export default function HomeScreen({ navigation }: Props) {
+export default function HomeScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const C = useColors();
   const styles = useMemo(() => makeStyles(C), [C]);
-  const { expenses, budget, userName, profileImage, currency } = useContext(ExpenseContext);
+  const { expenses, budget, userName, profileImage, currency } = useAppStore();
   const firstName = userName ? userName.split(' ')[0] : 'there';
   const avatarLetter = userName ? userName[0].toUpperCase() : '?';
   const now = new Date();
@@ -51,7 +51,7 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.date}>{dateStr}</Text>
             <Text style={styles.greet}>Hey, {firstName} 👋</Text>
           </View>
-          <Pressable style={styles.avatar} onPress={() => navigation.navigate('Profile')}>
+          <Pressable style={styles.avatar} onPress={() => router.navigate('/(tabs)/profile')}>
             {profileImage
               ? <Image source={{ uri: profileImage }} style={styles.avatarImg} />
               : <Text style={styles.avatarText}>{avatarLetter}</Text>
@@ -102,7 +102,7 @@ export default function HomeScreen({ navigation }: Props) {
 
         <View style={styles.recentHeader}>
           <Text style={styles.sectionTitle}>Recent</Text>
-          <Pressable onPress={() => navigation.navigate('Reports')}>
+          <Pressable onPress={() => router.navigate('/(tabs)/reports')}>
             <Text style={styles.seeAll}>see all →</Text>
           </Pressable>
         </View>
@@ -111,7 +111,7 @@ export default function HomeScreen({ navigation }: Props) {
           {recent.map((t, i) => (
             <Pressable
               key={t.id}
-              onPress={() => navigation.navigate('AddEdit', { expense: t })}
+              onPress={() => router.push('/add-edit?id=' + t.id)}
               style={[styles.txRow, i < recent.length - 1 && styles.txDivider]}
             >
               <View style={styles.txIcon}>

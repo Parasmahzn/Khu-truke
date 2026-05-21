@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, ViewStyle } from 'react-native';
-import { useColors } from '../ThemeContext';
+import { useColors } from '../context/ThemeContext';
 
 type ChipProps = {
   children: React.ReactNode;

@@ -1,21 +1,21 @@
-import React, { useContext, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenHeader from '../components/ScreenHeader';
 import Chip from '../components/Chip';
-import { useColors } from '../ThemeContext';
-import { ExpenseContext, expensesInMonth, expensesOn, sumAmount, formatMoney } from '../store';
+import { useColors } from '../context/ThemeContext';
+import { useAppStore } from '../store';
+import { expensesInMonth, expensesOn, sumAmount, formatMoney } from '../utils/expenses';
 import { MONTHS } from '../constants';
 import type { Colors } from '../theme';
-import type { TabScreenProps } from '../navigation/types';
+import { useRouter } from 'expo-router';
 
-type Props = TabScreenProps<'Reports'>;
-
-export default function ReportsScreen({ navigation }: Props) {
+export default function ReportsScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const C = useColors();
   const styles = useMemo(() => makeStyles(C), [C]);
-  const { expenses, currency } = useContext(ExpenseContext);
+  const { expenses, currency } = useAppStore();
   const [cursor, setCursor] = useState<Date>(() => { const d = new Date(); d.setDate(1); return d; });
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
@@ -134,7 +134,7 @@ export default function ReportsScreen({ navigation }: Props) {
             ) : selectedList.map((t) => (
               <Pressable
                 key={t.id}
-                onPress={() => navigation.navigate('AddEdit', { expense: t })}
+                onPress={() => router.push('/add-edit?id=' + t.id)}
                 style={styles.dayRow}
               >
                 <View style={{ flex: 1 }}>

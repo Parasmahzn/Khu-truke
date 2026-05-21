@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Logo from '../components/Logo';
-import { useColors } from '../ThemeContext';
+import { useColors } from '../context/ThemeContext';
 import { RADIUS } from '../theme';
 import type { Colors } from '../theme';
 import { CURRENCIES } from '../constants';

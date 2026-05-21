@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { storeGet, storeSet } from './storage';
-import { COLORS, DARK_COLORS, Colors } from './theme';
+import { storeGet, storeSet } from '../utils/storage';
+import { COLORS, DARK_COLORS, Colors } from '../theme';
 
 type ThemeContextValue = { isDark: boolean; colors: Colors; toggleDark: () => void };
 

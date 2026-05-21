@@ -13,8 +13,8 @@ App is named **Khu₹truke**. npm package name is `khutruke`.
 ## Tech Stack
 
 - **Framework**: Expo SDK 54 (React Native 0.81.5, React 19.1.0)
-- **Navigation**: React Navigation v6 — native stack + bottom tabs with a fully custom floating tab bar (center FAB)
-- **State management**: React Context (`ExpenseContext`) + three custom hooks, persisted via AsyncStorage and expo-secure-store — no server, local-first
+- **Navigation**: Expo Router (file-based routing) — Stack + bottom tabs with a fully custom floating tab bar (center FAB); built on React Navigation v6 internally
+- **State management**: Zustand (`useAppStore`) — single store in `store.ts`, persisted via AsyncStorage and expo-secure-store — no server, local-first
 - **Styling**: StyleSheet API (NativeWind is NOT used in this project)
 - **Charts**: react-native-chart-kit + react-native-svg (donut/pie and bar charts)
 - **Type safety**: TypeScript strict mode — `tsconfig.json` extends `expo/tsconfig.base`
@@ -36,7 +36,7 @@ There is no `test` or `lint` script defined in `package.json`.
 
 ## Entry point
 
-`"main": "node_modules/expo/AppEntry.js"` in `package.json` — standard Expo entry point. The root component is `App.tsx` in the project root (not a file-system router). Navigation, providers, and the custom tab bar are all defined there.
+`"main": "expo-router/entry"` in `package.json`. The `app/` directory is the route root — all screens are file-based routes. Providers, the root Stack layout, and SplashScreen handling are in `app/_layout.tsx`.
 
 ## Platform note
 
@@ -44,42 +44,51 @@ Development happens on Windows (PowerShell). iOS builds require a Mac or EAS Bui
 
 ## Architecture
 
-### Navigation types (`src/navigation/types.ts`)
+### Navigation (`app/` directory)
 
-Navigation param lists and screen prop types are centralised here:
-- `RootStackParamList` — Onboarding, Setup, Main, AddEdit (accepts `{ expense?: Expense }`), Settings
-- `MainTabParamList` — Home, Reports, Analytics, Profile
-- `RootStackScreenProps<T>` — screen props helper for root stack screens
-- `TabScreenProps<T>` — composite screen props for tab screens (gives access to both tab and root stack navigators)
+Expo Router file-based routing. The `app/` directory defines all routes:
 
-### Navigation (`App.tsx`)
-
-Two navigators are composed in `App.tsx`:
-
-- **Root `NativeStack`**: `Onboarding` → `Setup` → `Main` → `AddEdit` (modal, slides from bottom) → `Settings`
-- **`MainTabs` (BottomTabNavigator)**: `Home`, `Reports`, `Analytics`, `Profile` — rendered with a custom `CustomTabBar` component that has a center FAB wired to `navigation.navigate("AddEdit")`
-
-Initial route logic on launch:
 ```
-isUserConfigured  →  "Main"
-!isUserConfigured && onboarded  →  "Setup"
-neither  →  "Onboarding"
+app/
+├── _layout.tsx      # Root layout — providers, SplashScreen gate, Stack screen config
+├── index.tsx        # Entry — OTA update check + initial redirect
+├── (auth)/
+│   ├── _layout.tsx  # Passthrough Stack for auth screens
+│   ├── onboarding.tsx
+│   └── setup.tsx
+├── (tabs)/
+│   ├── _layout.tsx  # Bottom tab layout using CustomTabBar
+│   ├── index.tsx    # Home tab
+│   ├── reports.tsx
+│   ├── analytics.tsx
+│   └── profile.tsx
+├── add-edit.tsx     # Modal (presentation: modal, animation: slide_from_bottom)
+└── settings.tsx     # Pushed from Profile → Manage categories
 ```
-`isUserConfigured = !!userName || setupDone || hasAnyExpenses` — returning users with any persisted data skip the flow even if setup flags are missing.
+
+Initial route logic in `app/index.tsx` (runs after all data is loaded):
+```
+isUserConfigured  →  "/(tabs)"
+!isUserConfigured && onboarded  →  "/(auth)/setup"
+neither  →  "/(auth)/onboarding"
+```
+`isUserConfigured = !!userName || setupDone || hasAnyExpenses` — returning users skip the flow.
+
+- `SplashScreen.preventAutoHideAsync()` keeps the native splash visible in `app/_layout.tsx` until the store's `initialize()` completes and sets `ready: true`.
+- OTA force-update check runs in `app/index.tsx` via `expo-updates`.
+- Screens use `useRouter()` from `expo-router` for all navigation. Editing an expense passes only `expense.id` as a URL param (`/add-edit?id=<id>`); AddEditScreen looks it up from `useAppStore().expenses`.
 
 ### State management
 
-All global state lives in a single **`ExpenseContext`** (`src/store.ts`). The context value is composed in `App.tsx` from three hooks and passed down via `ExpenseContext.Provider`. Screens consume it with `useContext(ExpenseContext)`.
+All global state lives in a single Zustand store exported as **`useAppStore`** from `store.ts`. Screens consume it with `const { expenses, budget, ... } = useAppStore()`.
 
-| Hook | File | Owns |
-|---|---|---|
-| `useUserProfile()` | `src/hooks/useUserProfile.ts` | `userName`, `profileImage`, `currency`, `budget`, `onboarded`, `setupDone` |
-| `useExpenses(currencyCode)` | `src/hooks/useExpenses.ts` | `expenses[]` for the active currency |
-| `useCustomCategories()` | `src/hooks/useCustomCategories.ts` | `customCategories[]` |
+`app/_layout.tsx` renders a `SplashGate` component that calls `useAppStore.getState().initialize()` once on mount. `initialize()` loads all data from storage in two sequential phases (profile first, then budget + expenses + categories), then sets `ready: true` which triggers `SplashScreen.hideAsync()`.
 
-**Critical ordering**: `useExpenses` is gated on `profileReady` so the active currency is restored from storage before expenses load — prevents migrating legacy data into the wrong currency bucket.
+**Currency change**: `saveCurrency(code)` updates the store immediately and reloads the budget and expenses for the new currency bucket. A guard (`get().currency.code !== activeCode`) prevents stale writes if the user switches currencies quickly.
 
-### Storage layer (`src/storage.ts`)
+The `hooks/` directory has been deleted — its three files (`useUserProfile`, `useExpenses`, `useCustomCategories`) are fully absorbed into the Zustand store.
+
+### Storage layer (`utils/storage.ts`)
 
 A thin `storeGet / storeSet / storeRemove / storeMultiRemove` abstraction routes keys between two backends:
 
@@ -96,9 +105,9 @@ Storage key conventions:
 
 Expenses and budgets are siloed per currency code — clearing one currency's data does not affect others.
 
-### Shared constants (`src/constants/`)
+### Shared constants (`constants/`)
 
-Application-wide data that multiple screens or hooks share. Import from the barrel:
+Application-wide data that multiple screens share. Import from the barrel:
 
 ```ts
 import { CURRENCIES, BUILT_IN_CATEGORIES, CATEGORY_COLORS, COMMON_TAGS, MONTHS } from '../constants';
@@ -111,12 +120,12 @@ import { CURRENCIES, BUILT_IN_CATEGORIES, CATEGORY_COLORS, COMMON_TAGS, MONTHS }
 | `tags.ts` | `COMMON_TAGS` — 6 pre-defined tag strings |
 | `time.ts` | `MONTHS` — 12 full month name strings |
 
-Hook-private storage keys (`LEGACY_KEY`, `FLAG`, `KEY`, etc.) stay in their respective hook files — they are implementation details, not shared constants.
+Store-private storage keys (`LEGACY_BUDGET_KEY`, `LEGACY_EXPENSES_KEY`, `FLAG`, etc.) stay in `store.ts` — they are implementation details, not shared constants.
 
-### Theming (`src/theme.ts` + `src/ThemeContext.tsx`)
+### Theming (`theme.ts` + `context/ThemeContext.tsx`)
 
-- `src/theme.ts` exports `COLORS` (light), `DARK_COLORS`, `FONTS`, `SPACING`, `RADIUS` tokens. Primary: `#7c3aed`.
-- `ThemeProvider` wraps the app in `App.tsx`; dark mode is persisted at `@pw/darkMode`.
+- `theme.ts` exports `COLORS` (light), `DARK_COLORS`, `FONTS`, `SPACING`, `RADIUS` tokens. Primary: `#7c3aed`.
+- `ThemeProvider` wraps the app in `app/_layout.tsx`; dark mode is persisted at `@pw/darkMode`.
 - Screens use `const C = useColors()` and define styles as `useMemo(() => makeStyles(C), [C])` so they re-derive on theme toggle.
 
 ### Data model
@@ -135,9 +144,9 @@ Expense = {
 ```
 
 Built-in categories: Groceries, Dining, Coffee, Transport, Bills, Fun, Shopping, Health.
-Supported currencies (fixed list in `src/constants/currencies.ts`): USD, THB, NPR, INR, CAD.
+Supported currencies (fixed list in `constants/currencies.ts`): USD, THB, NPR, INR, CAD.
 
-### Utility helpers (`src/store.ts`)
+### Utility helpers (`utils/expenses.ts`)
 
 - `sumAmount(list)` — total spend
 - `expensesOn(list, dateObj)` — filter to a single day
