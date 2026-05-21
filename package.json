@@ -40,6 +40,9 @@
     "typescript": "^5.9.3"
   },
   "private": true,
+  "overrides": {
+    "react-dom": "19.1.0"
+  },
   "expo": {
     "install": {
       "exclude": [
