@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Switch, Alert, Image, Mo
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
-import Chip from '../components/Chip';
 import { useAppStore } from '../store';
 import { formatMoney } from '../utils/expenses';
 import { CURRENCIES } from '../constants';
@@ -20,7 +19,11 @@ const makeStyles = (C: Colors) => StyleSheet.create({
     shadowColor: C.ink, shadowOpacity: 1, shadowOffset: { width: 2, height: 2 }, shadowRadius: 0,
     overflow: 'visible',
   },
-  avatarImg: { width: 80, height: 80, borderRadius: 40, borderWidth: 1.5, borderColor: C.ink },
+  avatarInner: {
+    width: 80, height: 80, borderRadius: 40,
+    overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
+  },
+  avatarImg: { width: 80, height: 80 },
   avatarText: { color: C.onPurple, fontSize: 30, fontWeight: '900' },
   editBadge: {
     position: 'absolute', bottom: -2, right: -2,
@@ -91,6 +94,17 @@ const makeStyles = (C: Colors) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
   logoutText: { color: C.ink, fontSize: 16, fontWeight: '800' },
+  imageViewBg: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.9)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  imageViewImg: { width: '85%', aspectRatio: 1, borderRadius: 16 },
+  imageViewClose: {
+    position: 'absolute', top: 52, right: 20,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
 });
 
 type RowProps = {
@@ -133,9 +147,18 @@ export default function ProfileScreen() {
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [draftBudget, setDraftBudget] = useState('');
+  const [imageViewOpen, setImageViewOpen] = useState(false);
 
   const pickImage = () => {
-    const options = [
+    if (profileImage) {
+      Alert.alert('Profile Photo', 'What would you like to do?', [
+        { text: 'Remove Photo', style: 'destructive', onPress: () => saveProfileImage(null) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+      return;
+    }
+
+    Alert.alert('Profile Photo', 'Choose a source', [
       {
         text: 'Camera', onPress: async () => {
           const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -150,18 +173,13 @@ export default function ProfileScreen() {
           if (!perm.granted) { Alert.alert('Permission needed', 'Allow photo access to pick an image.'); return; }
           const result = await ImagePicker.launchImageLibraryAsync({
             allowsEditing: true, aspect: [1, 1] as [number, number], quality: 0.7,
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: 'images' as ImagePicker.MediaType,
           });
           if (!result.canceled) saveProfileImage(result.assets[0].uri);
         },
       },
-      ...(profileImage ? [{
-        text: 'Remove Photo', style: 'destructive' as const,
-        onPress: () => saveProfileImage(null),
-      }] : []),
-      { text: 'Cancel', style: 'cancel' as const },
-    ];
-    Alert.alert('Profile Photo', 'Choose a source', options);
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const onExport = () => {
@@ -176,10 +194,14 @@ export default function ProfileScreen() {
   };
 
   const onLogout = () => {
-    Alert.alert('Go to welcome screen?', 'Your data will be kept safe.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Continue', onPress: () => { router.replace('/(auth)/onboarding'); } },
-    ]);
+    Alert.alert(
+      'Clear all data?',
+      'This will permanently delete all your expenses, budget, profile information, and app settings. This action cannot be undone.\n\nDo you want to continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Continue', style: 'destructive', onPress: () => { router.replace('/(auth)/onboarding'); } },
+      ],
+    );
   };
 
   const tabBarReserve = Platform.OS === 'ios' ? 96 : 86;
@@ -190,19 +212,23 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
 
         <View style={styles.avatarRow}>
-          <Pressable style={styles.avatarWrap} onPress={pickImage}>
-            {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.avatarImg} />
-            ) : (
-              <Text style={styles.avatarText}>{avatarLetter}</Text>
-            )}
-            <View style={styles.editBadge}>
-              <Ionicons name="pencil" size={12} color={C.purpleDark} />
+          <Pressable
+            style={styles.avatarWrap}
+            onPress={() => profileImage ? setImageViewOpen(true) : pickImage()}
+          >
+            <View style={styles.avatarInner}>
+              {profileImage ? (
+                <Image source={{ uri: profileImage }} style={styles.avatarImg} />
+              ) : (
+                <Text style={styles.avatarText}>{avatarLetter}</Text>
+              )}
             </View>
+            <Pressable style={styles.editBadge} onPress={pickImage} hitSlop={8}>
+              <Ionicons name="pencil" size={12} color={C.purpleDark} />
+            </Pressable>
           </Pressable>
           <View style={{ marginLeft: 14 }}>
             <Text style={styles.name}>{userName || 'You'}</Text>
-            <Chip active onPress={pickImage}>change photo</Chip>
           </View>
         </View>
 
@@ -305,6 +331,17 @@ export default function ProfileScreen() {
               </Pressable>
             </View>
           </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={imageViewOpen} transparent animationType="fade" onRequestClose={() => setImageViewOpen(false)}>
+        <Pressable style={styles.imageViewBg} onPress={() => setImageViewOpen(false)}>
+          {profileImage && (
+            <Image source={{ uri: profileImage }} style={styles.imageViewImg} resizeMode="contain" />
+          )}
+          <View style={styles.imageViewClose}>
+            <Ionicons name="close" size={22} color="#fff" />
+          </View>
         </Pressable>
       </Modal>
 

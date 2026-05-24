@@ -16,15 +16,20 @@ const MOVED_TO_ASYNC = new Set([
 
 export async function storeGet(key: string): Promise<string | null> {
   if (SECURE_KEYS.has(key)) {
-    const val = await SecureStore.getItemAsync(key);
-    if (val !== null) return val;
+    try {
+      const val = await SecureStore.getItemAsync(key);
+      if (val !== null) return val;
 
-    const legacy = await AsyncStorage.getItem(key);
-    if (legacy !== null) {
-      await SecureStore.setItemAsync(key, legacy).catch(() => {});
-      await AsyncStorage.removeItem(key).catch(() => {});
+      const legacy = await AsyncStorage.getItem(key);
+      if (legacy !== null) {
+        await SecureStore.setItemAsync(key, legacy).catch(() => {});
+        await AsyncStorage.removeItem(key).catch(() => {});
+      }
+      return legacy;
+    } catch {
+      // SecureStore unavailable — fall back to AsyncStorage so callers never throw
+      return AsyncStorage.getItem(key).catch(() => null);
     }
-    return legacy;
   }
 
   const val = await AsyncStorage.getItem(key);

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { File as FSFile, Paths } from 'expo-file-system';
 import { storeGet, storeSet, storeRemove } from './utils/storage';
 import { CURRENCIES } from './constants';
 
@@ -66,13 +67,14 @@ export const useAppStore = create<AppStore>()((set, get) => ({
   initialize: async () => {
     if (get().ready) return;
     try {
-      // Phase 1: load profile fields in parallel
+      // Phase 1: load profile fields in parallel — individual .catch so a single
+      // SecureStore/AsyncStorage failure doesn't abort the whole phase
       const [n, o, s, c, img, allKeys] = await Promise.all([
-        storeGet('@pw/userName'),
-        storeGet('@pw/onboarded'),
-        storeGet('@pw/setup'),
-        storeGet('@pw/currency'),
-        storeGet('@pw/profileImage'),
+        storeGet('@pw/userName').catch(() => null),
+        storeGet('@pw/onboarded').catch(() => null),
+        storeGet('@pw/setup').catch(() => null),
+        storeGet('@pw/currency').catch(() => null),
+        storeGet('@pw/profileImage').catch(() => null),
         AsyncStorage.getAllKeys().catch(() => [] as readonly string[]),
       ]);
 
@@ -92,64 +94,71 @@ export const useAppStore = create<AppStore>()((set, get) => ({
         } catch {}
       }
 
+      const isUserConfigured = !!(n) || setupDone || hasAnyExpenses;
+
       set({
         userName: n || '',
         profileImage: img || null,
         currency: foundCurrency,
         onboarded: isOn(o),
-        isUserConfigured: !!(n) || setupDone || hasAnyExpenses,
+        isUserConfigured,
       });
 
-      // Phase 2: load budget, categories, expenses in parallel
+      // Phase 2: load budget, categories, expenses — isolated so failures
+      // don't lose the Phase 1 state already written above
       const activeCode = foundCurrency.code;
-
-      const [budgetRaw, catRaw, expRaw] = await Promise.all([
-        (async () => {
-          let raw = await storeGet(budgetKeyFor(activeCode));
-          if (raw === null) {
-            const legacy = await storeGet(LEGACY_BUDGET_KEY);
-            if (legacy !== null) {
-              await storeSet(budgetKeyFor(activeCode), legacy).catch(() => {});
-              await storeRemove(LEGACY_BUDGET_KEY).catch(() => {});
-              raw = legacy;
+      try {
+        const [budgetRaw, catRaw, expRaw] = await Promise.all([
+          (async () => {
+            let raw = await storeGet(budgetKeyFor(activeCode));
+            if (raw === null) {
+              const legacy = await storeGet(LEGACY_BUDGET_KEY);
+              if (legacy !== null) {
+                await storeSet(budgetKeyFor(activeCode), legacy).catch(() => {});
+                await storeRemove(LEGACY_BUDGET_KEY).catch(() => {});
+                raw = legacy;
+              }
             }
-          }
-          return raw;
-        })(),
-        AsyncStorage.getItem('@pw/categories'),
-        (async () => {
-          let raw = await AsyncStorage.getItem(expensesKeyFor(activeCode));
-          if (raw === null) {
-            const legacy = await AsyncStorage.getItem(LEGACY_EXPENSES_KEY);
-            if (legacy !== null) {
-              await AsyncStorage.setItem(expensesKeyFor(activeCode), legacy).catch(() => {});
-              await AsyncStorage.removeItem(LEGACY_EXPENSES_KEY).catch(() => {});
-              raw = legacy;
+            return raw;
+          })(),
+          AsyncStorage.getItem('@pw/categories'),
+          (async () => {
+            let raw = await AsyncStorage.getItem(expensesKeyFor(activeCode));
+            if (raw === null) {
+              const legacy = await AsyncStorage.getItem(LEGACY_EXPENSES_KEY);
+              if (legacy !== null) {
+                await AsyncStorage.setItem(expensesKeyFor(activeCode), legacy).catch(() => {});
+                await AsyncStorage.removeItem(LEGACY_EXPENSES_KEY).catch(() => {});
+                raw = legacy;
+              }
             }
+            return raw;
+          })(),
+        ]);
+
+        if (get().currency.code !== activeCode) return;
+
+        let expenses: Expense[] = [];
+        if (expRaw) {
+          const parsed: Expense[] = JSON.parse(expRaw);
+          const cleaned = parsed.filter((x) => !SYNTHETIC_ID.test(x.id));
+          if (cleaned.length < parsed.length) {
+            AsyncStorage.setItem(expensesKeyFor(activeCode), JSON.stringify(cleaned)).catch(() => {});
           }
-          return raw;
-        })(),
-      ]);
-
-      if (get().currency.code !== activeCode) return;
-
-      let expenses: Expense[] = [];
-      if (expRaw) {
-        const parsed: Expense[] = JSON.parse(expRaw);
-        const cleaned = parsed.filter((x) => !SYNTHETIC_ID.test(x.id));
-        if (cleaned.length < parsed.length) {
-          AsyncStorage.setItem(expensesKeyFor(activeCode), JSON.stringify(cleaned)).catch(() => {});
+          expenses = cleaned;
         }
-        expenses = cleaned;
-      }
 
-      set({
-        budget: budgetRaw ? parseFloat(budgetRaw) || 0 : 0,
-        customCategories: catRaw ? JSON.parse(catRaw) : [],
-        expenses,
-        ready: true,
-      });
+        set({
+          budget: budgetRaw ? parseFloat(budgetRaw) || 0 : 0,
+          customCategories: catRaw ? JSON.parse(catRaw) : [],
+          expenses,
+        });
+      } catch {
+        // Phase 2 failure — budget/expenses/categories stay at defaults
+      }
     } catch {
+      // Phase 1 failure — isUserConfigured stays false, ready fires via finally
+    } finally {
       set({ ready: true });
     }
   },
@@ -191,11 +200,27 @@ export const useAppStore = create<AppStore>()((set, get) => ({
   },
 
   saveProfileImage: async (uri) => {
-    set({ profileImage: uri });
-    try {
-      if (uri) await storeSet('@pw/profileImage', uri);
-      else await storeRemove('@pw/profileImage');
-    } catch {}
+    const prev = get().profileImage;
+
+    if (uri) {
+      // Copy into documentDirectory so the file survives OS cache clears
+      let finalUri = uri;
+      try {
+        const dest = new FSFile(Paths.document, `profile_${Date.now()}.jpg`);
+        new FSFile(uri).copy(dest);
+        finalUri = dest.uri;
+      } catch {
+        // copy failed — use original URI (works for this session at least)
+      }
+      set({ profileImage: finalUri });
+      await storeSet('@pw/profileImage', finalUri).catch(() => {});
+      // Delete previous permanent file after the new one is saved
+      if (prev) { try { new FSFile(prev).delete(); } catch {} }
+    } else {
+      set({ profileImage: null });
+      await storeRemove('@pw/profileImage').catch(() => {});
+      if (prev) { try { new FSFile(prev).delete(); } catch {} }
+    }
   },
 
   saveCurrency: async (code) => {
@@ -246,19 +271,17 @@ export const useAppStore = create<AppStore>()((set, get) => ({
 
   markOnboarded: async () => {
     set({ onboarded: true });
-    try { await storeSet('@pw/onboarded', FLAG); } catch {}
+    await storeSet('@pw/onboarded', FLAG).catch(() => {});
   },
 
   completeSetup: async (name, currencyCode) => {
     const found = CURRENCIES.find((x) => x.code === currencyCode) || CURRENCIES[0];
     set({ userName: name, currency: found, isUserConfigured: true });
-    try {
-      await Promise.all([
-        storeSet('@pw/userName', name),
-        storeSet('@pw/currency', found.code),
-        storeSet('@pw/setup', FLAG),
-      ]);
-    } catch {}
+    await Promise.all([
+      storeSet('@pw/userName', name).catch(() => {}),
+      storeSet('@pw/currency', found.code).catch(() => {}),
+      storeSet('@pw/setup', FLAG).catch(() => {}),
+    ]);
   },
 
   addCustomCategory: async (cat) => {

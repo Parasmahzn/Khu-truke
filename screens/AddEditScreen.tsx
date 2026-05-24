@@ -65,7 +65,7 @@ export default function AddEditScreen() {
       }
       const result = await ImagePicker.launchImageLibraryAsync({
         quality: 0.8,
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: 'images' as ImagePicker.MediaType,
       });
       if (!result.canceled) setReceipt(result.assets[0].uri);
     }
