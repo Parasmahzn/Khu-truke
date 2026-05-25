@@ -51,6 +51,7 @@ type AppStore = {
   completeSetup: (name: string, currencyCode: string) => Promise<void>;
   addCustomCategory: (cat: Category) => Promise<void>;
   removeCustomCategory: (name: string) => Promise<void>;
+  updateCustomCategory: (oldName: string, updated: Category) => Promise<void>;
 };
 
 export const useAppStore = create<AppStore>()((set, get) => ({
@@ -292,6 +293,12 @@ export const useAppStore = create<AppStore>()((set, get) => ({
 
   removeCustomCategory: async (name) => {
     const next = get().customCategories.filter((c) => c.name !== name);
+    set({ customCategories: next });
+    AsyncStorage.setItem('@pw/categories', JSON.stringify(next)).catch(() => {});
+  },
+
+  updateCustomCategory: async (oldName, updated) => {
+    const next = get().customCategories.map((c) => c.name === oldName ? updated : c);
     set({ customCategories: next });
     AsyncStorage.setItem('@pw/categories', JSON.stringify(next)).catch(() => {});
   },

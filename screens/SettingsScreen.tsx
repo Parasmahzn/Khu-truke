@@ -6,17 +6,21 @@ import { useAppStore } from '../store';
 import type { Category } from '../store';
 import { CURRENCIES, BUILT_IN_CATEGORIES, EMOJI_SUGGESTIONS } from '../constants';
 import { useColors } from '../context/ThemeContext';
+import { useRouter } from 'expo-router';
 import { RADIUS } from '../theme';
 import type { Colors } from '../theme';
 export default function SettingsScreen() {
+  const router = useRouter();
   const C = useColors();
   const styles = useMemo(() => makeStyles(C), [C]);
   const {
-    customCategories, addCustomCategory, removeCustomCategory,
+    customCategories, addCustomCategory, removeCustomCategory, updateCustomCategory,
     currency, expenses, clearExpensesForCurrency, clearBudgetForCurrency, countExpensesForCurrency,
   } = useAppStore();
 
   const [addCatOpen, setAddCatOpen] = useState(false);
+  const [editCatOpen, setEditCatOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Category | null>(null);
   const [newCatEmoji, setNewCatEmoji] = useState('');
   const [newCatName, setNewCatName] = useState('');
   const [newCatError, setNewCatError] = useState('');
@@ -69,6 +73,27 @@ export default function SettingsScreen() {
     setNewCatEmoji(''); setNewCatName(''); setNewCatError('');
   };
 
+  const openEdit = (cat: Category) => {
+    setEditTarget(cat);
+    setNewCatEmoji(cat.icon);
+    setNewCatName(cat.name);
+    setNewCatError('');
+    setEditCatOpen(true);
+  };
+
+  const closeEdit = () => {
+    setEditCatOpen(false);
+    setEditTarget(null);
+    setNewCatEmoji(''); setNewCatName(''); setNewCatError('');
+  };
+
+  const saveEdit = () => {
+    if (!newCatName.trim()) { setNewCatError('Enter a category name'); return; }
+    const emoji = newCatEmoji.trim() || '📦';
+    updateCustomCategory(editTarget!.name, { name: newCatName.trim(), icon: emoji });
+    closeEdit();
+  };
+
   const onRemove = (cat: Category) => {
     Alert.alert(
       `Remove "${cat.name}"?`,
@@ -83,6 +108,10 @@ export default function SettingsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: C.paper }}>
       <ScreenHeader title="Settings" />
+      <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
+        <Ionicons name="chevron-back" size={20} color={C.purple} />
+        <Text style={styles.backText}>Back</Text>
+      </Pressable>
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
 
         <Text style={styles.sectionLabel}>BUILT-IN CATEGORIES</Text>
@@ -114,6 +143,9 @@ export default function SettingsScreen() {
               <View key={cat.name} style={[styles.catRow, i < customCategories.length - 1 && styles.catDivider]}>
                 <Text style={styles.catIcon}>{cat.icon}</Text>
                 <Text style={styles.catName}>{cat.name}</Text>
+                <Pressable onPress={() => openEdit(cat)} style={styles.editBtn}>
+                  <Ionicons name="pencil" size={14} color={C.purpleDark} />
+                </Pressable>
                 <Pressable onPress={() => onRemove(cat)} style={styles.removeBtn}>
                   <Ionicons name="close" size={14} color={C.danger} />
                 </Pressable>
@@ -155,6 +187,72 @@ export default function SettingsScreen() {
         </View>
 
       </ScrollView>
+
+      <Modal visible={editCatOpen} transparent animationType="fade" onRequestClose={closeEdit}>
+        <Pressable style={styles.modalBg} onPress={closeEdit}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Edit Category</Text>
+            <View style={styles.newCatRow}>
+              <View style={styles.emojiBox}>
+                <TextInput
+                  ref={emojiInputRef}
+                  value={newCatEmoji}
+                  onChangeText={(v) => setNewCatEmoji(v)}
+                  placeholder="😀"
+                  placeholderTextColor={C.mute}
+                  style={styles.emojiInput}
+                  maxLength={4}
+                />
+              </View>
+              <View style={[styles.nameBox, !!newCatError && { borderColor: C.danger }]}>
+                <TextInput
+                  ref={nameInputRef}
+                  value={newCatName}
+                  onChangeText={(v) => { setNewCatName(v); setNewCatError(''); }}
+                  placeholder="Category name"
+                  placeholderTextColor={C.mute}
+                  style={styles.nameInput}
+                  returnKeyType="done"
+                  onSubmitEditing={saveEdit}
+                />
+              </View>
+            </View>
+            {newCatError ? <Text style={styles.errText}>{newCatError}</Text> : null}
+
+            <Text style={styles.modalSubLabel}>SUGGESTIONS</Text>
+            <View style={styles.emojiGrid}>
+              {EMOJI_SUGGESTIONS.map((e) => (
+                <Pressable
+                  key={e}
+                  style={[styles.emojiCell, newCatEmoji === e && styles.emojiCellActive]}
+                  onPress={() => { setNewCatEmoji(e); nameInputRef.current?.focus(); }}
+                >
+                  <Text style={{ fontSize: 16 }}>{e}</Text>
+                </Pressable>
+              ))}
+              <Pressable
+                style={[
+                  styles.emojiCell, styles.emojiCellCustom,
+                  !!newCatEmoji && !EMOJI_SUGGESTIONS.includes(newCatEmoji) && styles.emojiCellActive,
+                ]}
+                onPress={() => emojiInputRef.current?.focus()}
+              >
+                <Ionicons name="pencil" size={14} color={C.purple} />
+              </Pressable>
+            </View>
+            <Text style={styles.customHint}>tap the pencil to type any emoji from your keyboard</Text>
+
+            <View style={styles.modalBtns}>
+              <Pressable style={[styles.modalBtn, styles.modalBtnGhost]} onPress={closeEdit}>
+                <Text style={styles.ghostBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={[styles.modalBtn, styles.modalBtnPrimary]} onPress={saveEdit}>
+                <Text style={styles.primaryBtnText}>Save</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal visible={addCatOpen} transparent animationType="fade" onRequestClose={closeCatModal}>
         <Pressable style={styles.modalBg} onPress={closeCatModal}>
@@ -226,6 +324,8 @@ export default function SettingsScreen() {
 }
 
 const makeStyles = (C: Colors) => StyleSheet.create({
+  backBtn:  { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 20, paddingVertical: 6 },
+  backText: { fontSize: 14, fontWeight: '700', color: C.purple },
   sectionLabel: { fontSize: 10, color: C.mute, letterSpacing: 1.5, fontWeight: '700', paddingHorizontal: 20, marginTop: 24, marginBottom: 8 },
   customHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingRight: 20, marginTop: 24 },
   addBtn: { paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1.5, borderColor: C.purple, borderRadius: 999 },
@@ -237,6 +337,7 @@ const makeStyles = (C: Colors) => StyleSheet.create({
   catName: { flex: 1, fontSize: 14, fontWeight: '600', color: C.ink },
   builtinBadge: { paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: C.line, borderRadius: 999 },
   builtinBadgeText: { fontSize: 9, color: C.mute, fontWeight: '700', letterSpacing: 0.5 },
+  editBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: C.purpleDark, alignItems: 'center', justifyContent: 'center', marginRight: 6 },
   removeBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: C.danger, alignItems: 'center', justifyContent: 'center' },
   emptyRow: { padding: 20 },
   emptyText: { color: C.mute, textAlign: 'center', fontSize: 13 },
