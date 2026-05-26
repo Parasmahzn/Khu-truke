@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppStore } from '../store';
@@ -34,11 +34,21 @@ export default function HomeScreen() {
     const dayAvg = now.getDate() > 0 ? monthSpent / now.getDate() : 0;
     const remaining = budget > 0 ? Math.max(0, budget - monthSpent) : 0;
     const pct = budget > 0 ? Math.min(100, (monthSpent / budget) * 100) : 0;
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const projectedMonthEnd = Math.round(dayAvg * daysInMonth);
 
-    return { monthSpent, todaySpent, weekSpent, dayAvg, remaining, pct };
+    return { monthSpent, todaySpent, weekSpent, dayAvg, remaining, pct, projectedMonthEnd, daysInMonth };
   }, [expenses, budget]);
 
-  const recent = [...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
+  const [showAllTx, setShowAllTx] = useState(false);
+  const allSorted = [...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const displayedTx = showAllTx ? allSorted : allSorted.slice(0, 5);
+
+  const dailyAvgTooltip =
+    `Total spent this month ÷ ${now.getDate()} days elapsed\n` +
+    `= ${currency.symbol}${formatMoney(stats.dayAvg)}/day\n\n` +
+    `At this pace you'll spend ~${currency.symbol}${formatMoney(stats.projectedMonthEnd, false)} by month end.`;
+
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
   const tabBarReserve = Platform.OS === 'ios' ? 96 : 86;
 
@@ -97,22 +107,22 @@ export default function HomeScreen() {
           <View style={{ width: 10 }} />
           <StatCard label="THIS WEEK" value={`${currency.symbol}${formatMoney(stats.weekSpent, false)}`} />
           <View style={{ width: 10 }} />
-          <StatCard label="DAILY AVG" value={`${currency.symbol}${formatMoney(stats.dayAvg, false)}`} />
+          <StatCard label="DAILY AVG" value={`${currency.symbol}${formatMoney(stats.dayAvg)}`} tooltip={dailyAvgTooltip} />
         </View>
 
         <View style={styles.recentHeader}>
-          <Text style={styles.sectionTitle}>Recent</Text>
-          <Pressable onPress={() => router.navigate('/(tabs)/reports')}>
-            <Text style={styles.seeAll}>see all →</Text>
+          <Text style={styles.sectionTitle}>{showAllTx ? 'All Transactions' : 'Recent'}</Text>
+          <Pressable onPress={() => setShowAllTx(v => !v)}>
+            <Text style={styles.seeAll}>{showAllTx ? '← less' : 'see all →'}</Text>
           </Pressable>
         </View>
 
         <View style={{ paddingHorizontal: 20 }}>
-          {recent.map((t, i) => (
+          {displayedTx.map((t, i) => (
             <Pressable
               key={t.id}
               onPress={() => router.push('/add-edit?id=' + t.id)}
-              style={[styles.txRow, i < recent.length - 1 && styles.txDivider]}
+              style={[styles.txRow, i < displayedTx.length - 1 && styles.txDivider]}
             >
               <View style={styles.txIcon}>
                 <Text style={{ fontSize: 16 }}>{t.icon || '💵'}</Text>
@@ -127,7 +137,7 @@ export default function HomeScreen() {
               </View>
             </Pressable>
           ))}
-          {recent.length === 0 && (
+          {allSorted.length === 0 && (
             <Text style={{ color: C.mute, textAlign: 'center', paddingVertical: 20 }}>
               No expenses yet. Tap + to add your first.
             </Text>

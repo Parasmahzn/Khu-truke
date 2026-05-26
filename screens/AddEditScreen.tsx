@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
   TextInput, Alert, Modal, Image,
@@ -13,6 +13,7 @@ import { useColors } from '../context/ThemeContext';
 import { RADIUS } from '../theme';
 import type { Colors } from '../theme';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { sanitizeAmountInput, validateAmountField, AMOUNT_MIN } from '../utils/validation';
 
 export default function AddEditScreen() {
   const insets = useSafeAreaInsets();
@@ -45,6 +46,15 @@ export default function AddEditScreen() {
   const [newCatError, setNewCatError] = useState('');
   const nameInputRef = useRef<TextInput>(null);
   const emojiInputRef = useRef<TextInput>(null);
+  const amountInputRef = useRef<TextInput>(null);
+  const [amountFocused, setAmountFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isEdit) {
+      const t = setTimeout(() => amountInputRef.current?.focus(), 50);
+      return () => clearTimeout(t);
+    }
+  }, []);
 
   const customTags = tags.filter((t) => !COMMON_TAGS.includes(t));
 
@@ -86,18 +96,15 @@ export default function AddEditScreen() {
   const displayAmount = useMemo(() => {
     if (!amount) return { whole: '0', cents: '00' };
     const [w = '0', c = ''] = amount.split('.');
-    return { whole: w || '0', cents: (c + '00').slice(0, 2) };
+    const formattedWhole = (parseInt(w, 10) || 0).toLocaleString('en-US');
+    return { whole: formattedWhole, cents: (c + '00').slice(0, 2) };
   }, [amount]);
 
   const onSave = () => {
     if (saving) return;
     const num = parseFloat(amount);
-    if (!num || num <= 0) {
+    if (!num || num < AMOUNT_MIN) {
       Alert.alert('Amount required', 'Enter a valid amount greater than zero.');
-      return;
-    }
-    if (num > 9_999_999) {
-      Alert.alert('Amount too large', 'Enter an amount under 9,999,999.');
       return;
     }
     setSaving(true);
@@ -165,13 +172,22 @@ export default function AddEditScreen() {
             <Text style={styles.amountWhole}>{displayAmount.whole}</Text>
             <Text style={styles.amountCents}>.{displayAmount.cents}</Text>
           </View>
-          <View style={styles.amountUnderline} />
+          <View style={[styles.amountUnderline, amountFocused && styles.amountUnderlineFocused]} />
           <TextInput
+            ref={amountInputRef}
             value={amount}
-            onChangeText={(v) => setAmount(v.replace(/[^0-9.]/g, ''))}
+            onChangeText={(v) => {
+              const s = sanitizeAmountInput(v);
+              if (validateAmountField(s)) setAmount(s);
+            }}
+            onFocus={() => setAmountFocused(true)}
+            onBlur={() => setAmountFocused(false)}
             placeholder="0.00"
             keyboardType="decimal-pad"
             style={styles.hiddenInput}
+            contextMenuHidden={true}
+            caretHidden={true}
+            selectTextOnFocus={true}
           />
         </View>
 
@@ -374,7 +390,8 @@ const makeStyles = (C: Colors) => StyleSheet.create({
   currencySign: { fontSize: 28, color: C.mute, fontWeight: '700' },
   amountWhole: { fontSize: 64, fontWeight: '900', color: C.purple, lineHeight: 68, letterSpacing: -1 },
   amountCents: { fontSize: 36, color: C.mute, fontWeight: '700' },
-  amountUnderline: { width: 180, height: 3, backgroundColor: C.purple, borderRadius: 2, marginTop: 4 },
+  amountUnderline: { width: 180, height: 3, backgroundColor: C.line, borderRadius: 2, marginTop: 4 },
+  amountUnderlineFocused: { backgroundColor: C.purple, shadowColor: C.purple, shadowOpacity: 0.4, shadowOffset: { width: 0, height: 2 }, shadowRadius: 4, elevation: 3 },
   hiddenInput: { position: 'absolute', width: '100%', height: '100%', opacity: 0, top: 0, left: 0 },
   section: { paddingHorizontal: 20, marginTop: 18 },
   label: { fontSize: 10, color: C.mute, letterSpacing: 1.5, fontWeight: '700' },

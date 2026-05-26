@@ -1,17 +1,17 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, Platform } from 'react-native';
-import { PieChart, BarChart, LineChart } from 'react-native-chart-kit';
 import ScreenHeader from '../components/ScreenHeader';
 import { useColors } from '../context/ThemeContext';
 import { useAppStore } from '../store';
 import { expensesInMonth, sumAmount, byCategory, formatMoney } from '../utils/expenses';
 import { CATEGORY_COLORS } from '../constants';
+import CategoryPieChart from '../components/CategoryPieChart';
+import DayDonutChart from '../components/DayDonutChart';
+import SpendingBarChart from '../components/SpendingBarChart';
+import MonthLineChart from '../components/MonthLineChart';
 import type { Colors } from '../theme';
 
 const { width } = Dimensions.get('window');
-// chartWrap has marginHorizontal:20 (width-40) + borderWidth:1.5 each side → inner = width-43
-// subtract extra padding so bars/lines never touch the border
-const chartWidth = width - 64;
 
 export default function AnalyticsScreen() {
   const C = useColors();
@@ -19,7 +19,7 @@ export default function AnalyticsScreen() {
   const { expenses, currency } = useAppStore();
   const now = new Date();
 
-  // ── Category / month data (existing) ─────────────────────────────
+  // ── Category / month data ─────────────────────────────────────────
   const monthList = useMemo(() => expensesInMonth(expenses, now.getFullYear(), now.getMonth()), [expenses]);
   const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevList = useMemo(() => expensesInMonth(expenses, prev.getFullYear(), prev.getMonth()), [expenses]);
@@ -72,26 +72,19 @@ export default function AnalyticsScreen() {
     })
   ), [expenses]);
 
-  const [selectedPoint, setSelectedPoint] = useState<{ index: number; value: number } | null>(null);
+  const [chartPage, setChartPage] = useState(0);
+  const sliderRef = useRef<ScrollView>(null);
 
-  // ── Shared chart config ───────────────────────────────────────────
-  const chartConfig = useMemo(() => ({
-    backgroundColor: C.white,
-    backgroundGradientFrom: C.white,
-    backgroundGradientTo: C.white,
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(124,58,237,${opacity})`,
-    labelColor: () => C.ink,
-    propsForDots: { r: '4', strokeWidth: '2', stroke: C.purple },
-    propsForBackgroundLines: { strokeDasharray: '', stroke: C.line, strokeOpacity: 0.5 },
-    propsForLabels: { fontSize: 9 },
-  }), [C]);
-
-  // Compact Y-axis labels: "1K" instead of "1000", no currency symbol
-  const formatYLabel = (v: string) => {
-    const n = +v;
-    return n >= 1000 ? `${Math.round(n / 1000)}K` : `${Math.round(n)}`;
-  };
+  const dayTotals = useMemo(() => {
+    const map: Record<string, number> = {};
+    monthList.forEach((x) => {
+      const key = x.date.slice(0, 10);
+      map[key] = (map[key] || 0) + x.amount;
+    });
+    return Object.entries(map)
+      .map(([date, total]) => ({ day: parseInt(date.slice(8), 10), total }))
+      .sort((a, b) => a.day - b.day);
+  }, [monthList]);
 
   const tabBarReserve = Platform.OS === 'ios' ? 96 : 86;
 
@@ -100,23 +93,47 @@ export default function AnalyticsScreen() {
       <ScreenHeader title="Analytics" />
       <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
 
-        {/* ── Spending by category ────────────────────────────────── */}
-        <Text style={styles.label}>SPENDING BY CATEGORY · {now.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</Text>
-        <View style={styles.chartWrap}>
-          {pieData.length > 0 ? (
-            <PieChart
-              data={pieData}
-              width={width - 40}
-              height={200}
-              accessor="value"
-              backgroundColor="transparent"
-              paddingLeft="15"
-              chartConfig={{ color: () => C.ink, labelColor: () => C.ink }}
-              hasLegend={true}
-            />
-          ) : (
-            <View style={styles.empty}><Text style={{ color: C.mute }}>No expenses this month yet.</Text></View>
-          )}
+        {/* ── Chart slider (category pie + day donut) ─────────────── */}
+        <Text style={styles.label}>
+          {chartPage === 0
+            ? `SPENDING BY CATEGORY · ${now.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}`
+            : `SPENDING BY DAY · ${now.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}`}
+        </Text>
+        <View style={styles.sliderCard}>
+          <ScrollView
+            ref={sliderRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onMomentumScrollEnd={(e) => {
+              const page = Math.round(e.nativeEvent.contentOffset.x / (width - 43));
+              setChartPage(page);
+            }}
+          >
+            {/* Page 0 — category pie chart */}
+            <View style={{ width: width - 43, alignItems: 'center', paddingVertical: 12 }}>
+              <CategoryPieChart data={pieData} />
+            </View>
+
+            {/* Page 1 — day-wise donut chart */}
+            <View style={{ width: width - 43, alignItems: 'center', paddingVertical: 12 }}>
+              <DayDonutChart dayTotals={dayTotals} />
+            </View>
+          </ScrollView>
+
+          {/* Page dot indicators */}
+          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, paddingBottom: 10, marginTop: 4 }}>
+            {[0, 1].map((i) => (
+              <View
+                key={i}
+                style={{
+                  width: i === chartPage ? 16 : 6, height: 6, borderRadius: 3,
+                  backgroundColor: i === chartPage ? C.purple : C.line,
+                }}
+              />
+            ))}
+          </View>
         </View>
 
         {/* ── Month totals ────────────────────────────────────────── */}
@@ -135,58 +152,13 @@ export default function AnalyticsScreen() {
         {/* ── Daily spending bar chart ────────────────────────────── */}
         <Text style={[styles.label, { marginTop: 20 }]}>DAILY SPENDING · LAST 7 DAYS</Text>
         <View style={styles.chartWrap}>
-          {last7Days.some((d) => d.total > 0) ? (
-            <BarChart
-              data={{
-                labels: last7Days.map((d) => d.label),
-                datasets: [{ data: last7Days.map((d) => d.total || 0.01) }],
-              }}
-              width={chartWidth}
-              height={180}
-              yAxisLabel=""
-              yAxisSuffix=""
-              chartConfig={chartConfig}
-              showValuesOnTopOfBars
-              fromZero
-              withInnerLines={false}
-            />
-          ) : (
-            <View style={styles.empty}><Text style={{ color: C.mute }}>No spend in the last 7 days.</Text></View>
-          )}
+          <SpendingBarChart data={last7Days} />
         </View>
 
         {/* ── 6-month trend line chart ────────────────────────────── */}
         <Text style={[styles.label, { marginTop: 20 }]}>6-MONTH TREND</Text>
         <View style={styles.chartWrap}>
-          {last6Months.some((m) => m.total > 0) ? (
-            <>
-              <LineChart
-                data={{
-                  labels: last6Months.map((m) => m.label),
-                  datasets: [{ data: last6Months.map((m) => m.total || 0.01) }],
-                }}
-                width={chartWidth}
-                height={180}
-                yAxisLabel=""
-                yAxisSuffix=""
-                formatYLabel={formatYLabel}
-                chartConfig={chartConfig}
-                bezier
-                onDataPointClick={({ index, value }) => setSelectedPoint({ index, value })}
-                withShadow={false}
-                getDotColor={(_dataPoint: number, index: number) =>
-                  selectedPoint?.index === index ? C.purple : C.purpleSoft
-                }
-              />
-              {selectedPoint && (
-                <Text style={styles.chartHint}>
-                  {last6Months[selectedPoint.index]?.label}: {currency.symbol}{Math.round(selectedPoint.value).toLocaleString()}
-                </Text>
-              )}
-            </>
-          ) : (
-            <View style={styles.empty}><Text style={{ color: C.mute }}>No spend in the last 6 months.</Text></View>
-          )}
+          <MonthLineChart data={last6Months} currencySymbol={currency.symbol} />
         </View>
 
         {/* ── vs last month trend cards ───────────────────────────── */}
@@ -216,14 +188,19 @@ export default function AnalyticsScreen() {
 
 const makeStyles = (C: Colors) => StyleSheet.create({
   label: { fontSize: 10, color: C.mute, letterSpacing: 1.5, fontWeight: '700', paddingHorizontal: 20, marginTop: 10 },
+  sliderCard: {
+    marginTop: 12, marginHorizontal: 20,
+    borderWidth: 1.5, borderColor: C.ink, borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: C.ink, shadowOpacity: 1, shadowOffset: { width: 2, height: 2 }, shadowRadius: 0,
+    elevation: 4,
+  },
   chartWrap: {
     alignItems: 'center', marginTop: 12, marginHorizontal: 20,
     borderWidth: 1.5, borderColor: C.ink, borderRadius: 16, paddingVertical: 12,
     overflow: 'hidden',
     shadowColor: C.ink, shadowOpacity: 1, shadowOffset: { width: 2, height: 2 }, shadowRadius: 0,
   },
-  empty: { height: 160, alignItems: 'center', justifyContent: 'center' },
-  chartHint: { fontSize: 12, color: C.purpleDark, fontWeight: '700', marginTop: 6 },
   totalRow: { flexDirection: 'row', marginTop: 14, paddingHorizontal: 20 },
   totalCard: { flex: 1, padding: 10, borderWidth: 1.5, borderColor: C.ink, borderRadius: 12, backgroundColor: C.white },
   totalLabel: { fontSize: 9, color: C.mute, letterSpacing: 1, fontWeight: '700' },
