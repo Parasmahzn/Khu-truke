@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar, DateData } from 'react-native-calendars';
 import ScreenHeader from '../components/ScreenHeader';
 import Chip from '../components/Chip';
@@ -46,6 +47,7 @@ function toShortDate(d: Date): string {
 export default function ReportsScreen() {
   const router = useRouter();
   const C = useColors();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(C), [C]);
   const { expenses, currency } = useAppStore();
 
@@ -193,7 +195,7 @@ export default function ReportsScreen() {
   const selectedList = selectedDay ? expensesOn(expenses, selectedDay) : null;
   const displayedList = selectedList ? (showAll ? selectedList : selectedList.slice(0, 5)) : null;
 
-  const tabBarReserve = Platform.OS === 'ios' ? 96 : 86;
+  const tabBarReserve = (Platform.OS === 'ios' ? 96 : 86) + insets.bottom;
 
   return (
     <View style={{ flex: 1, backgroundColor: C.paper, paddingBottom: tabBarReserve }}>

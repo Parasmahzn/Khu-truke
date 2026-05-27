@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FONTS } from '../theme';
 import { useColors } from '../context/ThemeContext';
 
@@ -23,11 +24,12 @@ const tabs: TabEntry[] = [
 export default function CustomTabBar({ state, navigation }: TabBarProps) {
   const C = useColors();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const tabStyles = useMemo(
     () =>
       StyleSheet.create({
-        wrap: { position: 'absolute', bottom: Platform.OS === 'ios' ? 28 : 18, left: 12, right: 12 },
+        wrap: { position: 'absolute', bottom: (Platform.OS === 'ios' ? 28 : 18) + insets.bottom, left: 12, right: 12 },
         bar: {
           height: 62, backgroundColor: C.white,
           borderWidth: 1.5, borderColor: C.ink, borderRadius: 18,
@@ -45,7 +47,7 @@ export default function CustomTabBar({ state, navigation }: TabBarProps) {
           elevation: 8,
         },
       }),
-    [C],
+    [C, insets.bottom],
   );
 
   const activeRouteName = state.routes[state.index].name;

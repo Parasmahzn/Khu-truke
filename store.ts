@@ -2,10 +2,10 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File as FSFile, Paths } from 'expo-file-system';
 import { storeGet, storeSet, storeRemove } from './utils/storage';
-import { CURRENCIES } from './constants';
+import { CURRENCIES, DEFAULT_CATEGORIES, CHART_CUSTOM_PALETTE } from './constants';
 
 export type Currency = { code: string; symbol: string; label: string };
-export type Category = { name: string; icon: string };
+export type Category = { name: string; icon: string; color?: string };
 export type Expense = {
   id: string;
   amount: number;
@@ -15,6 +15,7 @@ export type Expense = {
   tags: string[];
   date: string;
   receipt: string | null;
+  paymentType: string;
 };
 
 // private helpers
@@ -25,6 +26,13 @@ const expensesKeyFor = (code: string) => `@pw/expenses:${code}`;
 const LEGACY_BUDGET_KEY = '@pw/budget';
 const LEGACY_EXPENSES_KEY = '@pw/expenses';
 const SYNTHETIC_ID = /^s\d+$/;
+const pickCategoryColor = (existing: Category[]): string => {
+  const used = new Set(existing.map((c) => c.color).filter(Boolean));
+  return (
+    CHART_CUSTOM_PALETTE.find((c) => !used.has(c)) ??
+    CHART_CUSTOM_PALETTE[existing.length % CHART_CUSTOM_PALETTE.length]
+  );
+};
 
 type AppStore = {
   ready: boolean;
@@ -36,6 +44,8 @@ type AppStore = {
   onboarded: boolean;
   isUserConfigured: boolean;
   customCategories: Category[];
+  builtInCategories: Category[];
+  joinedAt: string;
 
   initialize: () => Promise<void>;
   addExpense: (exp: Omit<Expense, 'id'>) => void;
@@ -52,6 +62,8 @@ type AppStore = {
   addCustomCategory: (cat: Category) => Promise<void>;
   removeCustomCategory: (name: string) => Promise<void>;
   updateCustomCategory: (oldName: string, updated: Category) => Promise<void>;
+  updateBuiltInCategory: (oldName: string, updated: Category) => Promise<void>;
+  removeBuiltInCategory: (name: string) => Promise<void>;
 };
 
 export const useAppStore = create<AppStore>()((set, get) => ({
@@ -64,6 +76,8 @@ export const useAppStore = create<AppStore>()((set, get) => ({
   onboarded: false,
   isUserConfigured: false,
   customCategories: [],
+  builtInCategories: DEFAULT_CATEGORIES,
+  joinedAt: '',
 
   initialize: async () => {
     if (get().ready) return;
@@ -109,7 +123,7 @@ export const useAppStore = create<AppStore>()((set, get) => ({
       // don't lose the Phase 1 state already written above
       const activeCode = foundCurrency.code;
       try {
-        const [budgetRaw, catRaw, expRaw] = await Promise.all([
+        const [budgetRaw, catRaw, builtInCatRaw, expRaw] = await Promise.all([
           (async () => {
             let raw = await storeGet(budgetKeyFor(activeCode));
             if (raw === null) {
@@ -123,6 +137,7 @@ export const useAppStore = create<AppStore>()((set, get) => ({
             return raw;
           })(),
           AsyncStorage.getItem('@pw/categories'),
+          AsyncStorage.getItem('@pw/builtInCategories'),
           (async () => {
             let raw = await AsyncStorage.getItem(expensesKeyFor(activeCode));
             if (raw === null) {
@@ -149,10 +164,32 @@ export const useAppStore = create<AppStore>()((set, get) => ({
           expenses = cleaned;
         }
 
+        let customCategories: Category[] = catRaw ? JSON.parse(catRaw) : [];
+        if (customCategories.some((c) => !c.color)) {
+          customCategories = customCategories.map((c) => {
+            if (c.color) return c;
+            const used = new Set(customCategories.map((x) => x.color).filter(Boolean));
+            return { ...c, color: CHART_CUSTOM_PALETTE.find((p) => !used.has(p)) ?? CHART_CUSTOM_PALETTE[0] };
+          });
+          AsyncStorage.setItem('@pw/categories', JSON.stringify(customCategories)).catch(() => {});
+        }
+
+        const joinedRaw = await AsyncStorage.getItem('@pw/joinedAt');
+        let joinedAt = joinedRaw ?? '';
+        if (!joinedAt && expenses.length > 0) {
+          joinedAt = expenses.reduce((min, x) => x.date < min ? x.date : min, expenses[0].date).slice(0, 10);
+          AsyncStorage.setItem('@pw/joinedAt', joinedAt).catch(() => {});
+        } else if (!joinedAt && isUserConfigured) {
+          joinedAt = new Date().toISOString().slice(0, 10);
+          AsyncStorage.setItem('@pw/joinedAt', joinedAt).catch(() => {});
+        }
+
         set({
           budget: budgetRaw ? parseFloat(budgetRaw) || 0 : 0,
-          customCategories: catRaw ? JSON.parse(catRaw) : [],
+          customCategories,
+          builtInCategories: builtInCatRaw ? JSON.parse(builtInCatRaw) : DEFAULT_CATEGORIES,
           expenses,
+          joinedAt,
         });
       } catch {
         // Phase 2 failure — budget/expenses/categories stay at defaults
@@ -277,16 +314,20 @@ export const useAppStore = create<AppStore>()((set, get) => ({
 
   completeSetup: async (name, currencyCode) => {
     const found = CURRENCIES.find((x) => x.code === currencyCode) || CURRENCIES[0];
-    set({ userName: name, currency: found, isUserConfigured: true });
+    const today = new Date().toISOString().slice(0, 10);
+    set({ userName: name, currency: found, isUserConfigured: true, joinedAt: today });
     await Promise.all([
       storeSet('@pw/userName', name).catch(() => {}),
       storeSet('@pw/currency', found.code).catch(() => {}),
       storeSet('@pw/setup', FLAG).catch(() => {}),
+      AsyncStorage.setItem('@pw/joinedAt', today).catch(() => {}),
     ]);
   },
 
   addCustomCategory: async (cat) => {
-    const next = [...get().customCategories, cat];
+    const all = [...get().builtInCategories, ...get().customCategories];
+    const withColor = { ...cat, color: pickCategoryColor(all) };
+    const next = [...get().customCategories, withColor];
     set({ customCategories: next });
     AsyncStorage.setItem('@pw/categories', JSON.stringify(next)).catch(() => {});
   },
@@ -301,5 +342,17 @@ export const useAppStore = create<AppStore>()((set, get) => ({
     const next = get().customCategories.map((c) => c.name === oldName ? updated : c);
     set({ customCategories: next });
     AsyncStorage.setItem('@pw/categories', JSON.stringify(next)).catch(() => {});
+  },
+
+  updateBuiltInCategory: async (oldName, updated) => {
+    const next = get().builtInCategories.map((c) => c.name === oldName ? updated : c);
+    set({ builtInCategories: next });
+    AsyncStorage.setItem('@pw/builtInCategories', JSON.stringify(next)).catch(() => {});
+  },
+
+  removeBuiltInCategory: async (name) => {
+    const next = get().builtInCategories.filter((c) => c.name !== name);
+    set({ builtInCategories: next });
+    AsyncStorage.setItem('@pw/builtInCategories', JSON.stringify(next)).catch(() => {});
   },
 }));

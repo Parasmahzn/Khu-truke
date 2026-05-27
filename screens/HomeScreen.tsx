@@ -50,7 +50,7 @@ export default function HomeScreen() {
     `At this pace you'll spend ~${currency.symbol}${formatMoney(stats.projectedMonthEnd, false)} by month end.`;
 
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
-  const tabBarReserve = Platform.OS === 'ios' ? 96 : 86;
+  const tabBarReserve = (Platform.OS === 'ios' ? 96 : 86) + insets.bottom;
 
   return (
     <View style={{ flex: 1, backgroundColor: C.paper, paddingBottom: tabBarReserve }}>
@@ -111,7 +111,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.recentHeader}>
-          <Text style={styles.sectionTitle}>{showAllTx ? 'All Transactions' : 'Recent'}</Text>
+          <Text style={styles.sectionTitle}>{showAllTx ? 'All Expenses' : 'Recent Expenses'}</Text>
           <Pressable onPress={() => setShowAllTx(v => !v)}>
             <Text style={styles.seeAll}>{showAllTx ? '← less' : 'see all →'}</Text>
           </Pressable>

@@ -11,8 +11,8 @@ Built with Expo SDK 54 + TypeScript, targeting iOS and Android.
 - **expo-updates** — OTA force-update check on every launch
 - **@react-native-async-storage/async-storage** — persists expenses (namespaced per currency), categories, and profile flags
 - **expo-secure-store** — stores sensitive values (budget, profile image URI, dark mode preference)
-- **react-native-chart-kit** + **react-native-svg** — donut chart on the Analytics screen
-- **react-native-safe-area-context** — proper iOS notch / Android status-bar handling
+- **react-native-chart-kit** + **react-native-svg** — pie, bar, line, and custom donut charts on the Analytics screen
+- **react-native-safe-area-context** — proper iOS notch / Android system navigation bar handling
 - **expo-image-picker** — receipt capture from camera or photo library
 
 ## Run it
@@ -35,10 +35,10 @@ npx expo install --fix  # realign native module versions if needed
 |---|---|---|---|
 | 1 | **Onboarding** | root stack, first launch | Logo hero + CTA. Skip or Get Started both proceed. Re-triggerable via Profile → Log out. |
 | 2 | **Setup** | root stack, after onboarding | Name + currency picker. Runs once, skipped for returning users. |
-| 3 | **Home** | tab | Budget hero card, quick stats (today / week / daily avg), recent transactions. |
+| 3 | **Home** | tab | Budget hero card, quick stats (today / week / daily avg with tooltip), recent + all expenses toggle. |
 | 4 | **Reports** | tab | Calendar month grid with per-day spending heatmap. Tap a day to drill in. |
-| 5 | **Add / Edit** | modal stack | Amount input, category strip, note, tag chips, receipt scan/upload. Edit mode adds delete. |
-| 6 | **Analytics** | tab | Donut chart (category share) + month total vs last month + trend cards. |
+| 5 | **Add / Edit** | modal stack | Amount input (comma-formatted, max 999,999), category strip, note, tag chips, receipt scan/upload. Edit mode adds delete. |
+| 6 | **Analytics** | tab | Swipeable category pie + day donut chart, bar chart (last 7 days), line chart (6-month trend), category trend cards. |
 | 7 | **Profile** | tab | Avatar, monthly budget editor, dark mode toggle, currency switcher, CSV export, logout. |
 | 8 | **Settings** | root stack | Manage custom categories, clear data per currency. |
 
@@ -123,19 +123,24 @@ Khu₹truke/
 │   └── ThemeContext.tsx            # ThemeProvider, useColors(), useTheme()
 ├── constants/
 │   ├── currencies.ts              # CURRENCIES — 5 supported currency objects
-│   ├── categories.ts              # BUILT_IN_CATEGORIES, EMOJI_SUGGESTIONS, CATEGORY_COLORS
+│   ├── categories.ts              # DEFAULT_CATEGORIES, EMOJI_SUGGESTIONS, CATEGORY_COLORS
 │   ├── tags.ts                    # COMMON_TAGS — 6 pre-defined tag strings
-│   ├── time.ts                    # MONTHS — 12 month name strings
 │   └── index.ts                   # barrel re-export
 ├── utils/
 │   ├── expenses.ts                # sumAmount, expensesOn, expensesInMonth, byCategory, formatMoney
+│   ├── validation.ts              # sanitizeAmountInput, validateAmountField, AMOUNT_MIN, AMOUNT_MAX
 │   └── storage.ts                 # storeGet/storeSet abstraction (AsyncStorage ↔ SecureStore)
 ├── components/
-│   ├── CustomTabBar.tsx           # floating tab bar with center FAB
+│   ├── CustomTabBar.tsx           # floating tab bar with center FAB (safe-area aware)
+│   ├── ScreenHeader.tsx           # large title + purple underline (safe-area aware)
+│   ├── StatCard.tsx               # small stat tile (supports tooltip modal)
+│   ├── CategoryPieChart.tsx       # pie chart — category breakdown
+│   ├── DayDonutChart.tsx          # SVG donut chart — per-day spending
+│   ├── SpendingBarChart.tsx       # bar chart — last 7 days
+│   ├── MonthLineChart.tsx         # line chart — 6-month trend
 │   ├── Logo.tsx                   # ₹ squircle logo mark
 │   ├── Chip.tsx                   # tag pill (pressable or static)
-│   ├── StatCard.tsx               # small stat tile
-│   └── ScreenHeader.tsx           # large title + purple underline
+│   └── LegalModal.tsx             # reusable legal/info modal
 └── screens/
     ├── OnboardingScreen.tsx
     ├── SetupScreen.tsx

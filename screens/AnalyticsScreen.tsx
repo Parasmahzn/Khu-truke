@@ -1,10 +1,11 @@
 import React, { useMemo, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenHeader from '../components/ScreenHeader';
 import { useColors } from '../context/ThemeContext';
 import { useAppStore } from '../store';
 import { expensesInMonth, sumAmount, byCategory, formatMoney } from '../utils/expenses';
-import { CATEGORY_COLORS } from '../constants';
+import { CHART_CATEGORY_COLORS, CHART_CUSTOM_PALETTE } from '../constants';
 import CategoryPieChart from '../components/CategoryPieChart';
 import DayDonutChart from '../components/DayDonutChart';
 import SpendingBarChart from '../components/SpendingBarChart';
@@ -12,11 +13,13 @@ import MonthLineChart from '../components/MonthLineChart';
 import type { Colors } from '../theme';
 
 const { width } = Dimensions.get('window');
+const nameHash = (s: string) => s.split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) & 0xffff, 0);
 
 export default function AnalyticsScreen() {
   const C = useColors();
   const styles = useMemo(() => makeStyles(C), [C]);
-  const { expenses, currency } = useAppStore();
+  const insets = useSafeAreaInsets();
+  const { expenses, currency, customCategories } = useAppStore();
   const now = new Date();
 
   // ── Category / month data ─────────────────────────────────────────
@@ -34,10 +37,16 @@ export default function AnalyticsScreen() {
     return map;
   }, [prevList]);
 
+  const colorMap = useMemo(() => {
+    const map: Record<string, string> = { ...CHART_CATEGORY_COLORS };
+    customCategories.forEach((cat) => { if (cat.color) map[cat.name] = cat.color; });
+    return map;
+  }, [customCategories]);
+
   const pieData = cats.map((c) => ({
     name: c.name,
     value: c.value,
-    color: CATEGORY_COLORS[c.name] ?? C.mute,
+    color: colorMap[c.name] ?? CHART_CUSTOM_PALETTE[nameHash(c.name) % CHART_CUSTOM_PALETTE.length],
     legendFontColor: C.ink,
     legendFontSize: 11,
   }));
@@ -86,7 +95,7 @@ export default function AnalyticsScreen() {
       .sort((a, b) => a.day - b.day);
   }, [monthList]);
 
-  const tabBarReserve = Platform.OS === 'ios' ? 96 : 86;
+  const tabBarReserve = (Platform.OS === 'ios' ? 96 : 86) + insets.bottom;
 
   return (
     <View style={{ flex: 1, backgroundColor: C.paper, paddingBottom: tabBarReserve }}>

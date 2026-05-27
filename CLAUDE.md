@@ -16,7 +16,7 @@ App is named **Khu₹truke**. npm package name is `khutruke`.
 - **Navigation**: Expo Router (file-based routing) — Stack + bottom tabs with a fully custom floating tab bar (center FAB); built on React Navigation v6 internally
 - **State management**: Zustand (`useAppStore`) — single store in `store.ts`, persisted via AsyncStorage and expo-secure-store — no server, local-first
 - **Styling**: StyleSheet API (NativeWind is NOT used in this project)
-- **Charts**: react-native-chart-kit + react-native-svg (donut/pie and bar charts)
+- **Charts**: react-native-chart-kit + react-native-svg (donut/pie, bar, line charts)
 - **Type safety**: TypeScript strict mode — `tsconfig.json` extends `expo/tsconfig.base`
 - **Image handling**: expo-image-picker (receipt capture from camera or photo library)
 - **Icons**: @expo/vector-icons (Ionicons set)
@@ -110,17 +110,35 @@ Expenses and budgets are siloed per currency code — clearing one currency's da
 Application-wide data that multiple screens share. Import from the barrel:
 
 ```ts
-import { CURRENCIES, BUILT_IN_CATEGORIES, CATEGORY_COLORS, COMMON_TAGS, MONTHS } from '../constants';
+import { CURRENCIES, DEFAULT_CATEGORIES, CATEGORY_COLORS, COMMON_TAGS } from '../constants';
 ```
 
 | File | Exports |
 |---|---|
 | `currencies.ts` | `CURRENCIES` — the fixed list of 5 supported Currency objects |
-| `categories.ts` | `BUILT_IN_CATEGORIES` — 8 built-in expense categories; `EMOJI_SUGGESTIONS` — 7 emoji picker suggestions; `CATEGORY_COLORS` — hex colors keyed by category name |
+| `categories.ts` | `DEFAULT_CATEGORIES` — the default built-in expense categories; `EMOJI_SUGGESTIONS` — 7 emoji picker suggestions; `CATEGORY_COLORS` — hex colors keyed by category name |
 | `tags.ts` | `COMMON_TAGS` — 6 pre-defined tag strings |
-| `time.ts` | `MONTHS` — 12 full month name strings |
 
 Store-private storage keys (`LEGACY_BUDGET_KEY`, `LEGACY_EXPENSES_KEY`, `FLAG`, etc.) stay in `store.ts` — they are implementation details, not shared constants.
+
+**Constants rule**: **All named constants must live in `constants/`** — no exceptions. Constants used in only one file still belong there; the `constants/` folder is the single source of truth for every fixed value in the project. Pick the most relevant existing file (`categories.ts`, `currencies.ts`, `tags.ts`) or create a new feature-specific file (e.g. `charts.ts`, `limits.ts`). Do **not** inline magic numbers or shared strings directly in screen or component files.
+
+### Utility helpers (`utils/`)
+
+- **`expenses.ts`** — `sumAmount`, `expensesOn`, `expensesInMonth`, `byCategory`, `formatMoney`
+- **`validation.ts`** — `sanitizeAmountInput` (formatting/cleaning), `validateAmountField` (range check), `AMOUNT_MIN` (0.01), `AMOUNT_MAX` (999,999)
+- **`storage.ts`** — `storeGet / storeSet / storeRemove / storeMultiRemove` abstraction
+
+### Chart components (`components/`)
+
+Each chart type is its own component; `AnalyticsScreen` composes them rather than rendering chart primitives directly.
+
+| File | Renders |
+|---|---|
+| `CategoryPieChart.tsx` | react-native-chart-kit PieChart for category breakdown |
+| `DayDonutChart.tsx` | Custom SVG donut (react-native-svg) for per-day spending; owns `DAY_COLORS`, `polarToCartesian`, `arcPath` helpers |
+| `SpendingBarChart.tsx` | react-native-chart-kit BarChart for last-7-days spend |
+| `MonthLineChart.tsx` | react-native-chart-kit LineChart for 6-month trend; owns `selectedPoint` state |
 
 ### Theming (`theme.ts` + `context/ThemeContext.tsx`)
 
@@ -146,14 +164,12 @@ Expense = {
 Built-in categories: Groceries, Dining, Coffee, Transport, Bills, Fun, Shopping, Health.
 Supported currencies (fixed list in `constants/currencies.ts`): USD, THB, NPR, INR, CAD.
 
-### Utility helpers (`utils/expenses.ts`)
-
-- `sumAmount(list)` — total spend
-- `expensesOn(list, dateObj)` — filter to a single day
-- `expensesInMonth(list, year, month)` — filter to a month
-- `byCategory(list)` — `[{ name, value }]` sorted descending
-- `formatMoney(n, withCents?)` — thousands-formatted string
-
 ### Design conventions
 
 The "stamped" card look uses `shadowOffset: { width: 2, height: 2 }, shadowRadius: 0, shadowOpacity: 1` (hard shadow, no blur) on cards and the FAB — do not soften these. All interactive elements use `Pressable`, not `TouchableOpacity`.
+
+**Safe area**: `SafeAreaProvider` is at the root (`app/_layout.tsx`). All screens must account for system insets:
+- Tab screens use `const insets = useSafeAreaInsets()` and set `paddingBottom: (Platform.OS === 'ios' ? 96 : 86) + insets.bottom` on their root `View`.
+- Stack screens (Settings) use `paddingBottom: insets.bottom + 24` on their `ScrollView`.
+- `CustomTabBar` positions itself at `bottom: (Platform.OS === 'ios' ? 28 : 18) + insets.bottom`.
+- Never use hardcoded bottom padding that ignores `insets.bottom` — it will clip content on 3-button Android devices.

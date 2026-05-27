@@ -8,7 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import Logo from '../components/Logo';
 import Chip from '../components/Chip';
 import { useAppStore } from '../store';
-import { BUILT_IN_CATEGORIES, COMMON_TAGS, EMOJI_SUGGESTIONS } from '../constants';
+import { COMMON_TAGS, EMOJI_SUGGESTIONS, PAYMENT_TYPES } from '../constants';
 import { useColors } from '../context/ThemeContext';
 import { RADIUS } from '../theme';
 import type { Colors } from '../theme';
@@ -21,12 +21,14 @@ export default function AddEditScreen() {
   const styles = useMemo(() => makeStyles(C), [C]);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { expenses, addExpense, updateExpense, deleteExpense, currency, customCategories, addCustomCategory } = useAppStore();
+  const { expenses, addExpense, updateExpense, deleteExpense, currency, customCategories, builtInCategories, addCustomCategory } = useAppStore();
 
   const existing = id ? (expenses.find((e) => e.id === id) ?? null) : null;
   const isEdit = !!existing;
 
-  const allCategories = [...BUILT_IN_CATEGORIES, ...customCategories];
+  const allCategories = [...builtInCategories, ...customCategories].filter(
+    (cat, i, arr) => arr.findIndex((c) => c.name === cat.name) === i,
+  );
 
   const [amount, setAmount] = useState(existing ? existing.amount.toFixed(2) : '');
   const [note, setNote] = useState(existing?.note ?? '');
@@ -34,6 +36,7 @@ export default function AddEditScreen() {
   const [icon, setIcon] = useState(existing?.icon ?? '🛒');
   const [tags, setTags] = useState<string[]>(existing?.tags ?? []);
   const [receipt, setReceipt] = useState<string | null>(existing?.receipt ?? null);
+  const [paymentType, setPaymentType] = useState<string>(existing?.paymentType ?? 'Cash');
   const [saving, setSaving] = useState(false);
 
   const [addingTag, setAddingTag] = useState(false);
@@ -114,6 +117,7 @@ export default function AddEditScreen() {
       category, icon, tags,
       receipt: receipt || null,
       date: existing?.date ?? new Date().toISOString(),
+      paymentType,
     };
     if (isEdit) updateExpense(existing.id, payload);
     else addExpense(payload);
@@ -130,6 +134,11 @@ export default function AddEditScreen() {
 
   const saveNewCategory = () => {
     if (!newCatName.trim()) { setNewCatError('Enter a category name'); return; }
+    const trimmed = newCatName.trim().toLowerCase();
+    const exists = [...builtInCategories, ...customCategories].some(
+      (c) => c.name.toLowerCase() === trimmed,
+    );
+    if (exists) { setNewCatError('A category with this name already exists'); return; }
     const emoji = newCatEmoji.trim() || '📦';
     const cat = { name: newCatName.trim(), icon: emoji };
     addCustomCategory(cat);
@@ -198,9 +207,9 @@ export default function AddEditScreen() {
             style={{ marginTop: 8 }}
             contentContainerStyle={{ gap: 8, paddingRight: 4 }}
           >
-            {allCategories.map((c) => (
+            {allCategories.map((c, i) => (
               <Pressable
-                key={c.name}
+                key={String(i)}
                 onPress={() => { setCategory(c.name); setIcon(c.icon); }}
                 style={[styles.catChip, category === c.name && styles.catChipActive]}
               >
@@ -212,6 +221,23 @@ export default function AddEditScreen() {
               <Text style={styles.addCatIcon}>+</Text>
             </Pressable>
           </ScrollView>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>PAYMENT TYPE</Text>
+          <View style={styles.paymentRow}>
+            {PAYMENT_TYPES.map((type) => (
+              <Pressable
+                key={type}
+                onPress={() => setPaymentType(type)}
+                style={[styles.paymentChip, paymentType === type && styles.paymentChipActive]}
+              >
+                <Text style={[styles.paymentChipText, paymentType === type && styles.paymentChipTextActive]}>
+                  {type}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -409,6 +435,15 @@ const makeStyles = (C: Colors) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', backgroundColor: C.white, alignSelf: 'center',
   },
   addCatIcon: { fontSize: 22, color: C.purple, lineHeight: 26, fontWeight: '700' },
+  paymentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  paymentChip: {
+    paddingHorizontal: 16, height: 34, borderRadius: 8,
+    borderWidth: 1.5, borderColor: C.ink, backgroundColor: C.white,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  paymentChipActive: { backgroundColor: C.purpleSoft, borderColor: C.purple },
+  paymentChipText: { fontSize: 12, fontWeight: '600', color: C.ink },
+  paymentChipTextActive: { color: C.purpleDark, fontWeight: '800' },
   inputBox: {
     marginTop: 6, borderWidth: 1.5, borderColor: C.ink, borderRadius: 10,
     paddingHorizontal: 12, height: 44, justifyContent: 'center', backgroundColor: C.white,

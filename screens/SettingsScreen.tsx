@@ -1,10 +1,11 @@
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Modal, TextInput } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
 import { useAppStore } from '../store';
 import type { Category } from '../store';
-import { CURRENCIES, BUILT_IN_CATEGORIES, EMOJI_SUGGESTIONS } from '../constants';
+import { CURRENCIES, EMOJI_SUGGESTIONS } from '../constants';
 import { useColors } from '../context/ThemeContext';
 import { useRouter } from 'expo-router';
 import { RADIUS } from '../theme';
@@ -13,14 +14,17 @@ export default function SettingsScreen() {
   const router = useRouter();
   const C = useColors();
   const styles = useMemo(() => makeStyles(C), [C]);
+  const insets = useSafeAreaInsets();
   const {
     customCategories, addCustomCategory, removeCustomCategory, updateCustomCategory,
+    builtInCategories, updateBuiltInCategory, removeBuiltInCategory,
     currency, expenses, clearExpensesForCurrency, clearBudgetForCurrency, countExpensesForCurrency,
   } = useAppStore();
 
   const [addCatOpen, setAddCatOpen] = useState(false);
   const [editCatOpen, setEditCatOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Category | null>(null);
+  const [editingBuiltIn, setEditingBuiltIn] = useState(false);
   const [newCatEmoji, setNewCatEmoji] = useState('');
   const [newCatName, setNewCatName] = useState('');
   const [newCatError, setNewCatError] = useState('');
@@ -62,6 +66,11 @@ export default function SettingsScreen() {
 
   const saveNewCategory = () => {
     if (!newCatName.trim()) { setNewCatError('Enter a category name'); return; }
+    const trimmed = newCatName.trim().toLowerCase();
+    const exists = [...builtInCategories, ...customCategories].some(
+      (c) => c.name.toLowerCase() === trimmed,
+    );
+    if (exists) { setNewCatError('A category with this name already exists'); return; }
     const emoji = newCatEmoji.trim() || '📦';
     addCustomCategory({ name: newCatName.trim(), icon: emoji });
     setNewCatEmoji(''); setNewCatName(''); setNewCatError('');
@@ -73,8 +82,9 @@ export default function SettingsScreen() {
     setNewCatEmoji(''); setNewCatName(''); setNewCatError('');
   };
 
-  const openEdit = (cat: Category) => {
+  const openEdit = (cat: Category, isBuiltIn = false) => {
     setEditTarget(cat);
+    setEditingBuiltIn(isBuiltIn);
     setNewCatEmoji(cat.icon);
     setNewCatName(cat.name);
     setNewCatError('');
@@ -84,23 +94,36 @@ export default function SettingsScreen() {
   const closeEdit = () => {
     setEditCatOpen(false);
     setEditTarget(null);
+    setEditingBuiltIn(false);
     setNewCatEmoji(''); setNewCatName(''); setNewCatError('');
   };
 
   const saveEdit = () => {
     if (!newCatName.trim()) { setNewCatError('Enter a category name'); return; }
+    const trimmed = newCatName.trim().toLowerCase();
+    const duplicate = [...builtInCategories, ...customCategories].some(
+      (c) => c.name.toLowerCase() === trimmed && c.name !== editTarget!.name,
+    );
+    if (duplicate) { setNewCatError('A category with this name already exists'); return; }
     const emoji = newCatEmoji.trim() || '📦';
-    updateCustomCategory(editTarget!.name, { name: newCatName.trim(), icon: emoji });
+    if (editingBuiltIn) {
+      updateBuiltInCategory(editTarget!.name, { name: newCatName.trim(), icon: emoji });
+    } else {
+      updateCustomCategory(editTarget!.name, { name: newCatName.trim(), icon: emoji });
+    }
     closeEdit();
   };
 
-  const onRemove = (cat: Category) => {
+  const onRemove = (cat: Category, isBuiltIn = false) => {
     Alert.alert(
       `Remove "${cat.name}"?`,
       'Existing expenses with this category are kept.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => removeCustomCategory(cat.name) },
+        {
+          text: 'Remove', style: 'destructive',
+          onPress: () => isBuiltIn ? removeBuiltInCategory(cat.name) : removeCustomCategory(cat.name),
+        },
       ]
     );
   };
@@ -112,17 +135,23 @@ export default function SettingsScreen() {
         <Ionicons name="chevron-back" size={20} color={C.purple} />
         <Text style={styles.backText}>Back</Text>
       </Pressable>
-      <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
 
         <Text style={styles.sectionLabel}>BUILT-IN CATEGORIES</Text>
         <View style={styles.listCard}>
-          {BUILT_IN_CATEGORIES.map((cat, i) => (
-            <View key={cat.name} style={[styles.catRow, i < BUILT_IN_CATEGORIES.length - 1 && styles.catDivider]}>
+          {builtInCategories.map((cat, i) => (
+            <View key={String(i)} style={[styles.catRow, i < builtInCategories.length - 1 && styles.catDivider]}>
               <Text style={styles.catIcon}>{cat.icon}</Text>
               <Text style={styles.catName}>{cat.name}</Text>
               <View style={styles.builtinBadge}>
                 <Text style={styles.builtinBadgeText}>built-in</Text>
               </View>
+              <Pressable onPress={() => openEdit(cat, true)} style={styles.editBtn}>
+                <Ionicons name="pencil" size={14} color={C.purpleDark} />
+              </Pressable>
+              <Pressable onPress={() => onRemove(cat, true)} style={styles.removeBtn}>
+                <Ionicons name="close" size={14} color={C.danger} />
+              </Pressable>
             </View>
           ))}
         </View>
@@ -140,7 +169,7 @@ export default function SettingsScreen() {
             </View>
           ) : (
             customCategories.map((cat, i) => (
-              <View key={cat.name} style={[styles.catRow, i < customCategories.length - 1 && styles.catDivider]}>
+              <View key={String(i)} style={[styles.catRow, i < customCategories.length - 1 && styles.catDivider]}>
                 <Text style={styles.catIcon}>{cat.icon}</Text>
                 <Text style={styles.catName}>{cat.name}</Text>
                 <Pressable onPress={() => openEdit(cat)} style={styles.editBtn}>

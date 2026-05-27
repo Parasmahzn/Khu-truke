@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Switch, Alert, Image, Modal, TextInput, Platform, Linking } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
 import LegalModal from '../components/LegalModal';
 import { useAppStore } from '../store';
 import { formatMoney } from '../utils/expenses';
-import { CURRENCIES, SUPPORT_EMAIL, APP_DEVELOPER, APP_VERSION } from '../constants';
+import { CURRENCIES, SUPPORT_EMAIL, APP_DEVELOPER, APP_VERSION, PRIVACY_POLICY_SECTIONS, TERMS_SECTIONS } from '../constants';
 import { useColors, useTheme } from '../context/ThemeContext';
 import { useRouter } from 'expo-router';
 import type { Colors } from '../theme';
@@ -32,7 +33,8 @@ const makeStyles = (C: Colors) => StyleSheet.create({
     backgroundColor: C.purpleSoft, borderWidth: 1.5, borderColor: C.ink,
     alignItems: 'center', justifyContent: 'center',
   },
-  name: { fontSize: 22, fontWeight: '800', color: C.ink, marginBottom: 6 },
+  name: { fontSize: 22, fontWeight: '800', color: C.ink, marginBottom: 2 },
+  savingSince: { fontSize: 12, color: C.mute, fontWeight: '600' },
   label: { fontSize: 10, color: C.mute, letterSpacing: 1.5, fontWeight: '700', paddingHorizontal: 20, marginTop: 24 },
   listCard: {
     marginHorizontal: 20, marginTop: 8,
@@ -140,10 +142,14 @@ function Row({ icon, label, value, right, last, onPress, styles, C }: RowProps) 
 export default function ProfileScreen() {
   const router = useRouter();
   const C = useColors();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(C), [C]);
   const { isDark, toggleDark } = useTheme();
-  const { expenses, userName, profileImage, saveProfileImage, budget, saveBudget, currency, saveCurrency } = useAppStore();
+  const { expenses, userName, profileImage, saveProfileImage, budget, saveBudget, currency, saveCurrency, joinedAt } = useAppStore();
   const avatarLetter = userName ? userName[0].toUpperCase() : '?';
+  const savingSince = joinedAt
+    ? new Date(joinedAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : null;
   const [notif, setNotif] = useState(true);
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
@@ -207,7 +213,7 @@ export default function ProfileScreen() {
     );
   };
 
-  const tabBarReserve = Platform.OS === 'ios' ? 96 : 86;
+  const tabBarReserve = (Platform.OS === 'ios' ? 96 : 86) + insets.bottom;
 
   return (
     <View style={{ flex: 1, backgroundColor: C.paper, paddingBottom: tabBarReserve }}>
@@ -232,6 +238,9 @@ export default function ProfileScreen() {
           </Pressable>
           <View style={{ marginLeft: 14 }}>
             <Text style={styles.name}>{userName || 'You'}</Text>
+            {savingSince && (
+              <Text style={styles.savingSince}>Saving since {savingSince}</Text>
+            )}
           </View>
         </View>
 
@@ -267,7 +276,17 @@ export default function ProfileScreen() {
                   <Pressable
                     key={c.code}
                     style={[styles.currencyChip, active && styles.currencyChipActive]}
-                    onPress={() => { saveCurrency(c.code); setCurrencyOpen(false); }}
+                    onPress={() => {
+                    if (c.code === currency.code) return;
+                    Alert.alert(
+                      `Switch to ${c.code}?`,
+                      `Your ${currency.code} expenses and budget are saved separately and won't be lost. You'll see ${c.code} data instead — switch back anytime to pick up where you left off.`,
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Switch', onPress: () => { saveCurrency(c.code); setCurrencyOpen(false); } },
+                      ]
+                    );
+                  }}
                   >
                     <Text style={[styles.currencyChipText, active && { color: C.onPurple }]}>
                       {c.symbol}  {c.code}
@@ -295,7 +314,7 @@ export default function ProfileScreen() {
         <Text style={styles.label}>SUPPORT</Text>
         <View style={styles.listCard}>
           <Row icon="chatbubble-outline" label="Feedback" onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)} styles={styles} C={C} />
-          <Row icon="star-outline" label="Rate App" onPress={() => Alert.alert('Rate Khu₹truke', 'App store listing coming soon!')} styles={styles} C={C} />
+          <Row icon="star-outline" label="Rate App" onPress={() => Alert.alert('Rate Khu₹truke', 'Play Store listing coming soon!')} styles={styles} C={C} />
           <Row icon="bug-outline" label="Report a Bug" last onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Bug%20Report`)} styles={styles} C={C} />
         </View>
 
@@ -357,16 +376,7 @@ export default function ProfileScreen() {
         onClose={() => setPrivacyOpen(false)}
         title="Privacy Policy"
         lastUpdated="May 25, 2026"
-        sections={[
-          { heading: '1. Overview', body: 'Khu₹truke is a local-first expense tracking application. All data you enter stays on your device. We do not operate servers, collect analytics, or transmit any personal or financial information over the internet.' },
-          { heading: '2. Data We Collect', body: "We do not collect any data. Your expenses, budget, profile name, and preferences are stored exclusively in your device's local storage (AsyncStorage and the device's secure store). None of this data leaves your device." },
-          { heading: '3. Third-Party Services', body: 'Khu₹truke does not use any third-party analytics, advertising SDKs, or tracking libraries. No data is shared with any third party.' },
-          { heading: '4. Camera & Photo Library', body: 'If you choose to attach a profile photo, the app requests access to your camera or photo library solely to let you pick or capture an image. The image URI is stored locally on your device and is never uploaded anywhere.' },
-          { heading: '5. Data Retention & Deletion', body: 'You are in full control of your data. You can delete all app data at any time by tapping "Log out" on this screen. This permanently removes all expenses, budget settings, and profile information from the device.' },
-          { heading: "6. Children's Privacy", body: 'This app is not directed at children under 13. We do not knowingly collect information from children.' },
-          { heading: '7. Changes to This Policy', body: 'We may update this Privacy Policy occasionally. The "Last updated" date at the top reflects the most recent revision.' },
-          { heading: '8. Contact', body: `If you have questions about this Privacy Policy, contact us at: ${SUPPORT_EMAIL}` },
-        ]}
+        sections={PRIVACY_POLICY_SECTIONS}
       />
 
       <LegalModal
@@ -374,18 +384,7 @@ export default function ProfileScreen() {
         onClose={() => setTermsOpen(false)}
         title="Terms of Use"
         lastUpdated="May 25, 2026"
-        sections={[
-          { heading: '1. Acceptance of Terms', body: 'By downloading or using Khu₹truke, you agree to be bound by these Terms of Use. If you do not agree, please do not use the app.' },
-          { heading: '2. Use of the App', body: 'Khu₹truke is provided for personal, non-commercial expense tracking. You agree to use it only for lawful purposes and in a manner that does not infringe the rights of others.' },
-          { heading: '3. Your Data', body: "All expense records, budgets, and settings you create are stored locally on your device. You are solely responsible for the accuracy of the data you enter. We do not have access to your data and cannot recover it if your device is lost or reset." },
-          { heading: '4. No Financial Advice', body: 'Khu₹truke is a personal budgeting tool and does not provide financial, tax, or investment advice. Consult a qualified professional for advice specific to your financial situation.' },
-          { heading: '5. Disclaimer of Warranties', body: 'The app is provided "as is" without warranty of any kind. We do not guarantee that the app will be error-free, uninterrupted, or free of viruses or other harmful components.' },
-          { heading: '6. Limitation of Liability', body: 'To the fullest extent permitted by applicable law, we shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of the app.' },
-          { heading: '7. Intellectual Property', body: 'All content, design, graphics, and code in Khu₹truke are the intellectual property of the developer. You may not copy, modify, or distribute any part of the app without prior written permission.' },
-          { heading: '8. Changes to Terms', body: 'We reserve the right to modify these Terms of Use at any time. Continued use of the app after changes constitutes acceptance of the revised terms.' },
-          { heading: '9. Governing Law', body: 'These Terms shall be governed by and construed in accordance with applicable laws. Any disputes shall be resolved in the courts of the applicable jurisdiction.' },
-          { heading: '10. Contact', body: `If you have questions about these Terms, contact us at: ${SUPPORT_EMAIL}` },
-        ]}
+        sections={TERMS_SECTIONS}
       />
 
       <Modal visible={imageViewOpen} transparent animationType="fade" onRequestClose={() => setImageViewOpen(false)}>

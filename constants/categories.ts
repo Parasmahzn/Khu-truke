@@ -1,27 +1,16 @@
 import type { Category } from '../store';
 
-export const BUILT_IN_CATEGORIES: Category[] = [
-  { name: 'Groceries', icon: '🛒' },
-  { name: 'Dining',    icon: '🍽️' },
-  { name: 'Coffee',    icon: '☕' },
-  { name: 'Transport', icon: '🚕' },
+export const DEFAULT_CATEGORIES: Category[] = [
   { name: 'Bills',     icon: '💡' },
-  { name: 'Fun',       icon: '🎬' },
-  { name: 'Shopping',  icon: '🛍️' },
+  { name: 'Coffee',    icon: '☕' },
+  { name: 'Dining',    icon: '🍽️' },
+  { name: 'Fun',       icon: '🎉' },
+  { name: 'Groceries', icon: '🛒' },
   { name: 'Health',    icon: '💊' },
+  { name: 'Shopping',  icon: '🛍️' },
+  { name: 'Transport', icon: '🚕' },
 ];
 
 export const EMOJI_SUGGESTIONS: string[] = [
   '🏠', '🚗', '✈️', '🍕', '☕', '🍺', '👥',
 ];
-
-export const CATEGORY_COLORS: Record<string, string> = {
-  Groceries: '#8b5cf6',
-  Dining:    '#f59e0b',
-  Coffee:    '#b45309',
-  Transport: '#0ea5e9',
-  Bills:     '#ef4444',
-  Fun:       '#ec4899',
-  Shopping:  '#10b981',
-  Health:    '#14b8a6',
-};
