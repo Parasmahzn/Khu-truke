@@ -32,7 +32,10 @@ export default function RootLayout() {
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="add-edit" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="settings" />
+            <Stack.Screen name="manage-categories" />
+            <Stack.Screen name="manage-tags" />
+            <Stack.Screen name="manage-currency" />
+            <Stack.Screen name="backup-restore" />
           </Stack>
           <StatusBar style="auto" />
         </SplashGate>

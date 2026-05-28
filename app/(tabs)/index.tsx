@@ -2,9 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useAppStore } from '../../store';
 import { expensesInMonth, expensesOn, formatMoney, sumAmount } from '../../utils/expenses';
 import { useColors } from '../../context/ThemeContext';
+import { useExpenses } from '../../hooks/useExpenses';
+import { useUserProfile } from '../../hooks/useUserProfile';
+import { useBudget } from '../../hooks/useBudget';
 import StatCard from '../../components/StatCard';
 import { Colors } from '../../theme';
 
@@ -13,7 +15,9 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const C = useColors();
   const styles = useMemo(() => makeStyles(C), [C]);
-  const { expenses, budget, userName, profileImage, currency } = useAppStore();
+  const { expenses } = useExpenses();
+  const { budget } = useBudget();
+  const { userName, profileImage, currency } = useUserProfile();
   const firstName = userName ? userName.split(' ')[0] : 'there';
   const avatarLetter = userName ? userName[0].toUpperCase() : '?';
   const now = new Date();
@@ -54,12 +58,12 @@ export default function HomeScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: C.paper, paddingBottom: tabBarReserve }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 20 }}>
+      <View style={{ paddingTop: insets.top + 8 }}>
 
         <View style={styles.headerRow}>
           <View>
             <Text style={styles.date}>{dateStr}</Text>
-            <Text style={styles.greet}>Hey, {firstName} ! 👋</Text>
+            <Text style={styles.greet}>Hey, {firstName} 👋</Text>
           </View>
           <Pressable style={styles.avatar} onPress={() => router.navigate('/(tabs)/profile')}>
             {profileImage
@@ -109,9 +113,10 @@ export default function HomeScreen() {
           <View style={{ width: 10 }} />
           <StatCard label="DAILY AVG" value={`${currency.symbol}${formatMoney(stats.dayAvg)}`} tooltip={dailyAvgTooltip} />
         </View>
-
+      </View>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
         <View style={styles.recentHeader}>
-          <Text style={styles.sectionTitle}>{showAllTx ? 'All Expenses' : 'Recent Expenses'}</Text>
+          <Text style={styles.sectionTitle}>{showAllTx ? 'All Activities' : 'Recent Activities'}</Text>
           <Pressable onPress={() => setShowAllTx(v => !v)}>
             <Text style={styles.seeAll}>{showAllTx ? '← less' : 'see all →'}</Text>
           </Pressable>
@@ -129,7 +134,21 @@ export default function HomeScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.txCat}>{t.category}</Text>
-                <Text style={styles.txNote}>{t.note}</Text>
+                {t.note ? <Text style={styles.txNote}>{t.note}</Text> : null}
+                {(t.paymentType || t.tags.length > 0) && (
+                  <View style={styles.txMeta}>
+                    {t.paymentType ? (
+                      <View style={styles.txPayType}>
+                        <Text style={styles.txPayTypeText}>{t.paymentType}</Text>
+                      </View>
+                    ) : null}
+                    {t.tags.map((tag) => (
+                      <View key={tag} style={styles.txTag}>
+                        <Text style={styles.txTagText}>#{tag}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={styles.txAmt}>-{currency.symbol}{formatMoney(t.amount)}</Text>
@@ -187,13 +206,19 @@ const makeStyles = (C: Colors) => StyleSheet.create({
   },
   sectionTitle: { fontSize: 22, fontWeight: '800', color: C.ink },
   seeAll: { color: C.purpleDark, fontSize: 12, fontWeight: '700' },
-  txRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, paddingHorizontal: 4 },
+  txRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 10, paddingHorizontal: 4 },
   txDivider: { borderBottomWidth: 1, borderBottomColor: C.line, borderStyle: 'dashed' },
   txIcon: {
     width: 36, height: 36, borderRadius: 18, backgroundColor: C.purpleSoft,
     borderWidth: 1.25, borderColor: C.ink, alignItems: 'center', justifyContent: 'center',
+    marginTop: 2,
   },
   txCat: { fontSize: 14, fontWeight: '700', color: C.ink },
   txNote: { fontSize: 11, color: C.mute },
   txAmt: { fontSize: 18, fontWeight: '800', color: C.ink, marginLeft: 8 },
+  txMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 5 },
+  txPayType: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 999, backgroundColor: C.purpleSoft },
+  txPayTypeText: { fontSize: 10, fontWeight: '700', color: C.purpleDark },
+  txTag: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 999, borderWidth: 1, borderColor: C.line },
+  txTagText: { fontSize: 10, color: C.mute },
 });
