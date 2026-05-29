@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform } from 'react-native';
+import React, { useMemo, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { expensesInMonth, expensesOn, formatMoney, sumAmount } from '../../utils/expenses';
+import { expensesInMonth, expensesOn, formatMoney, formatSmartMoney, sumAmount } from '../../utils/expenses';
+import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '../../context/ThemeContext';
 import { useExpenses } from '../../hooks/useExpenses';
 import { useUserProfile } from '../../hooks/useUserProfile';
@@ -36,21 +37,43 @@ export default function HomeScreen() {
     const weekSpent = sumAmount(weekList);
 
     const dayAvg = now.getDate() > 0 ? monthSpent / now.getDate() : 0;
+    const overBudget = budget > 0 && monthSpent > budget;
+    const overage = overBudget ? monthSpent - budget : 0;
     const remaining = budget > 0 ? Math.max(0, budget - monthSpent) : 0;
     const pct = budget > 0 ? Math.min(100, (monthSpent / budget) * 100) : 0;
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const projectedMonthEnd = Math.round(dayAvg * daysInMonth);
 
-    return { monthSpent, todaySpent, weekSpent, dayAvg, remaining, pct, projectedMonthEnd, daysInMonth };
+    return { monthSpent, todaySpent, weekSpent, dayAvg, overBudget, overage, remaining, pct, projectedMonthEnd, daysInMonth };
   }, [expenses, budget]);
 
-  const [showAllTx, setShowAllTx] = useState(false);
-  const allSorted = [...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const displayedTx = showAllTx ? allSorted : allSorted.slice(0, 5);
+  const flamePulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (stats.overBudget) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(flamePulse, { toValue: 1.35, duration: 600, useNativeDriver: true }),
+          Animated.timing(flamePulse, { toValue: 1.0, duration: 600, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      flamePulse.setValue(1);
+    }
+  }, [stats.overBudget]);
+
+  const monthExpenses = useMemo(
+    () => expensesInMonth(expenses, now.getFullYear(), now.getMonth()),
+    [expenses],
+  );
+  const allSorted = useMemo(
+    () => [...monthExpenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [monthExpenses],
+  );
+  const displayedTx = useMemo(() => allSorted.slice(0, 5), [allSorted]);
 
   const dailyAvgTooltip =
     `Total spent this month ÷ ${now.getDate()} days elapsed\n` +
-    `= ${currency.symbol}${formatMoney(stats.dayAvg)}/day\n\n` +
+    `= ${currency.symbol}${formatSmartMoney(stats.dayAvg)}/day\n\n` +
     `At this pace you'll spend ~${currency.symbol}${formatMoney(stats.projectedMonthEnd, false)} by month end.`;
 
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
@@ -76,18 +99,46 @@ export default function HomeScreen() {
         <View style={styles.balCard}>
           {budget > 0 ? (
             <>
-              <Text style={styles.balLabel}>REMAINING THIS MONTH</Text>
+              <View style={styles.balLabelRow}>
+                {stats.overBudget && (
+                  <Animated.View style={{ transform: [{ scale: flamePulse }], marginRight: 6 }}>
+                    <Ionicons name="flame" size={13} color={C.danger} />
+                  </Animated.View>
+                )}
+                <Text style={styles.balLabel}>
+                  {stats.overBudget ? 'BUDGET LIMIT EXCEEDED' : 'REMAINING THIS MONTH'}
+                </Text>
+              </View>
               <View style={styles.balRow}>
                 <Text style={styles.balCurrency}>{currency.symbol}</Text>
-                <Text style={styles.balAmount}>{formatMoney(stats.remaining, false)}</Text>
-                <Text style={styles.balCents}>.{(stats.remaining % 1).toFixed(2).slice(2) || '00'}</Text>
+                {stats.overBudget ? (
+                  <>
+                    <Text style={styles.balAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.4}>{formatMoney(stats.overage, false)}</Text>
+                    {Math.round(stats.overage * 100) % 100 !== 0 && (
+                      <Text style={styles.balCents}>.{(stats.overage % 1).toFixed(2).slice(2)}</Text>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.balAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.4}>{formatMoney(stats.remaining, false)}</Text>
+                    {Math.round(stats.remaining * 100) % 100 !== 0 && (
+                      <Text style={styles.balCents}>.{(stats.remaining % 1).toFixed(2).slice(2)}</Text>
+                    )}
+                  </>
+                )}
               </View>
-              <Text style={styles.balSub}>of {currency.symbol}{formatMoney(budget, false)} budget</Text>
+              {stats.overBudget ? (
+                <Text style={styles.balSub}>
+                  {currency.symbol}{formatSmartMoney(stats.overage)} over {currency.symbol}{formatMoney(budget, false)} budget
+                </Text>
+              ) : (
+                <Text style={styles.balSub}>of {currency.symbol}{formatMoney(budget, false)} budget</Text>
+              )}
               <View style={styles.barTrack}>
                 <View style={[styles.barFill, { width: `${stats.pct}%` }]} />
               </View>
               <View style={styles.barMeta}>
-                <Text style={styles.barMetaText}>spent {currency.symbol}{formatMoney(stats.monthSpent)}</Text>
+                <Text style={styles.barMetaText}>spent {currency.symbol}{formatSmartMoney(stats.monthSpent)}</Text>
                 <Text style={styles.barMetaText}>{Math.round(stats.pct)}%</Text>
               </View>
             </>
@@ -96,8 +147,10 @@ export default function HomeScreen() {
               <Text style={styles.balLabel}>SPENT THIS MONTH</Text>
               <View style={styles.balRow}>
                 <Text style={styles.balCurrency}>{currency.symbol}</Text>
-                <Text style={styles.balAmount}>{formatMoney(stats.monthSpent, false)}</Text>
-                <Text style={styles.balCents}>.{(stats.monthSpent % 1).toFixed(2).slice(2) || '00'}</Text>
+                <Text style={styles.balAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.4}>{formatMoney(stats.monthSpent, false)}</Text>
+                {Math.round(stats.monthSpent * 100) % 100 !== 0 && (
+                  <Text style={styles.balCents}>.{(stats.monthSpent % 1).toFixed(2).slice(2)}</Text>
+                )}
               </View>
               <Text style={styles.balSub}>
                 {now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
@@ -107,19 +160,16 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.statsRow}>
-          <StatCard label="TODAY" value={`${currency.symbol}${formatMoney(stats.todaySpent, false)}`} />
+          <StatCard label="TODAY" value={`${currency.symbol}${formatSmartMoney(stats.todaySpent)}`} />
           <View style={{ width: 10 }} />
-          <StatCard label="THIS WEEK" value={`${currency.symbol}${formatMoney(stats.weekSpent, false)}`} />
+          <StatCard label="THIS WEEK" value={`${currency.symbol}${formatSmartMoney(stats.weekSpent)}`} />
           <View style={{ width: 10 }} />
-          <StatCard label="DAILY AVG" value={`${currency.symbol}${formatMoney(stats.dayAvg)}`} tooltip={dailyAvgTooltip} />
+          <StatCard label="DAILY AVG" value={`${currency.symbol}${formatSmartMoney(stats.dayAvg)}`} tooltip={dailyAvgTooltip} />
         </View>
       </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
         <View style={styles.recentHeader}>
-          <Text style={styles.sectionTitle}>{showAllTx ? 'All Activities' : 'Recent Activities'}</Text>
-          <Pressable onPress={() => setShowAllTx(v => !v)}>
-            <Text style={styles.seeAll}>{showAllTx ? '← less' : 'see all →'}</Text>
-          </Pressable>
+          <Text style={styles.sectionTitle}>Recent Activities</Text>
         </View>
 
         <View style={{ paddingHorizontal: 20 }}>
@@ -151,7 +201,7 @@ export default function HomeScreen() {
                 )}
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.txAmt}>-{currency.symbol}{formatMoney(t.amount)}</Text>
+                <Text style={styles.txAmt}>-{currency.symbol}{formatSmartMoney(t.amount)}</Text>
                 {t.receipt ? <Text style={{ fontSize: 10, color: C.mute, marginTop: 2 }}>📎 receipt</Text> : null}
               </View>
             </Pressable>
@@ -189,10 +239,11 @@ const makeStyles = (C: Colors) => StyleSheet.create({
     shadowColor: C.ink, shadowOpacity: 1, shadowOffset: { width: 2, height: 2 }, shadowRadius: 0,
     elevation: 4,
   },
+  balLabelRow: { flexDirection: 'row', alignItems: 'center' },
   balLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 10, letterSpacing: 1.5, fontWeight: '700' },
   balRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 8 },
   balCurrency: { color: C.onPurple, fontSize: 28, fontWeight: '700', marginRight: 2, opacity: 0.8 },
-  balAmount: { color: C.onPurple, fontSize: 46, fontWeight: '800', lineHeight: 50 },
+  balAmount: { color: C.onPurple, fontSize: 46, fontWeight: '800', lineHeight: 50, flex: 1 },
   balCents: { color: 'rgba(255,255,255,0.7)', fontSize: 28, fontWeight: '700' },
   balSub: { color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 8 },
   barTrack: { height: 8, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 4, marginTop: 18, overflow: 'hidden' },
@@ -201,11 +252,9 @@ const makeStyles = (C: Colors) => StyleSheet.create({
   barMetaText: { color: 'rgba(255,255,255,0.85)', fontSize: 11 },
   statsRow: { flexDirection: 'row', paddingHorizontal: 20, marginTop: 16 },
   recentHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20, marginTop: 20, marginBottom: 10,
   },
   sectionTitle: { fontSize: 22, fontWeight: '800', color: C.ink },
-  seeAll: { color: C.purpleDark, fontSize: 12, fontWeight: '700' },
   txRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 10, paddingHorizontal: 4 },
   txDivider: { borderBottomWidth: 1, borderBottomColor: C.line, borderStyle: 'dashed' },
   txIcon: {

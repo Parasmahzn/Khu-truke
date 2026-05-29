@@ -36,6 +36,7 @@ export default function RootLayout() {
             <Stack.Screen name="manage-tags" />
             <Stack.Screen name="manage-currency" />
             <Stack.Screen name="backup-restore" />
+            <Stack.Screen name="category-detail" />
           </Stack>
           <StatusBar style="auto" />
         </SplashGate>

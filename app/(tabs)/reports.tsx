@@ -1,14 +1,15 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Calendar, DateData } from 'react-native-calendars';
+import { DateData } from 'react-native-calendars';
+import Calendar from '../../components/Calendar';
 import ScreenHeader from '../../components/ScreenHeader';
-import Chip from '../../components/Chip';
 import { useColors } from '../../context/ThemeContext';
 import { useExpenses } from '../../hooks/useExpenses';
 import { useUserProfile } from '../../hooks/useUserProfile';
-import { expensesInMonth, expensesOn, sumAmount, formatMoney } from '../../utils/expenses';
+import { expensesInMonth, expensesOn, sumAmount, formatMoney, formatSmartMoney } from '../../utils/expenses';
 import type { Colors } from '../../theme';
+import type { Expense } from '../../types';
 import { useRouter } from 'expo-router';
 
 type MarkedDates = Record<string, {
@@ -45,6 +46,17 @@ function toShortDate(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function groupByCategory(list: Expense[]) {
+  const map: Record<string, { icon: string; total: number }> = {};
+  for (const e of list) {
+    if (!map[e.category]) map[e.category] = { icon: e.icon || '💵', total: 0 };
+    map[e.category].total += e.amount;
+  }
+  return Object.entries(map)
+    .map(([name, { icon, total }]) => ({ name, icon, total }))
+    .sort((a, b) => b.total - a.total);
+}
+
 export default function ReportsScreen() {
   const router = useRouter();
   const C = useColors();
@@ -58,7 +70,6 @@ export default function ReportsScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('Month');
   const [cursor, setCursor] = useState<Date>(() => { const d = new Date(); d.setDate(1); return d; });
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
-  const [showAll, setShowAll] = useState(false);
   const [dayDate, setDayDate] = useState<Date>(() => new Date());
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [yearNum, setYearNum] = useState<number>(() => new Date().getFullYear());
@@ -106,19 +117,8 @@ export default function ReportsScreen() {
     return result;
   }, [dayTotalsMap, maxDay, selectedDayStr, C.purple, C.onPurple]);
 
-  const calendarTheme = useMemo(() => ({
-    backgroundColor: C.paper, calendarBackground: C.paper, textSectionTitleColor: C.mute,
-    selectedDayBackgroundColor: C.purple, selectedDayTextColor: C.onPurple,
-    todayTextColor: C.purpleDark, todayBackgroundColor: C.purpleSoft,
-    dayTextColor: C.ink, textDisabledColor: C.line, dotColor: C.purple, selectedDotColor: C.onPurple,
-    arrowColor: C.purple, monthTextColor: C.ink,
-    textDayFontWeight: '500' as const, textMonthFontWeight: '800' as const, textDayHeaderFontWeight: '700' as const,
-    textDayFontSize: 13, textMonthFontSize: 18, textDayHeaderFontSize: 10,
-  }), [C]);
-
   const handleDayPress = useCallback((day: DateData) => {
     setSelectedDay(new Date(day.year, day.month - 1, day.day));
-    setShowAll(false);
   }, []);
 
   const handleMonthChange = useCallback((m: DateData) => {
@@ -126,11 +126,11 @@ export default function ReportsScreen() {
     if (m.year > now.getFullYear() || (m.year === now.getFullYear() && m.month > now.getMonth() + 1)) return;
     setCursor(new Date(m.year, m.month - 1, 1));
     setSelectedDay(null);
-    setShowAll(false);
   }, []);
 
   const dayList = useMemo(() => expensesOn(expenses, dayDate), [expenses, dayDate]);
   const daySpent = sumAmount(dayList);
+  const dayGroups = useMemo(() => groupByCategory(dayList), [dayList]);
 
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
   const weekList = useMemo(() => {
@@ -138,6 +138,7 @@ export default function ReportsScreen() {
     return expenses.filter((x) => { const d = x.date.slice(0, 10); return d >= s && d <= e; });
   }, [expenses, weekStart, weekEnd]);
   const weekSpent = sumAmount(weekList);
+  const weekGroups = useMemo(() => groupByCategory(weekList), [weekList]);
 
   const prevWeekList = useMemo(() => {
     const s = toISODate(addDays(weekStart, -7)), e = toISODate(addDays(weekStart, -1));
@@ -154,6 +155,10 @@ export default function ReportsScreen() {
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
 
+  const monthGroups = useMemo(() => groupByCategory(monthList), [monthList]);
+  const monthFirstDay = toISODate(new Date(year, month, 1));
+  const monthLastDay = toISODate(new Date(year, month + 1, 0));
+
   const yearMonthTotals = useMemo(() => (
     Array.from({ length: 12 }, (_, i) => ({
       month: i,
@@ -163,10 +168,32 @@ export default function ReportsScreen() {
   ), [expenses, yearNum]);
   const yearSpent = yearMonthTotals.reduce((s, m) => s + m.total, 0);
 
-  const selectedList = selectedDay ? expensesOn(expenses, selectedDay) : null;
-  const displayedList = selectedList ? (showAll ? selectedList : selectedList.slice(0, 5)) : null;
-
   const tabBarReserve = (Platform.OS === 'ios' ? 96 : 86) + insets.bottom;
+
+  const renderCatGroups = (
+    groups: { name: string; icon: string; total: number }[],
+    dateFrom: string,
+    dateTo: string,
+    emptyMsg: string,
+  ) => (
+    <View style={{ marginTop: 16, paddingHorizontal: 20 }}>
+      {groups.length === 0 ? (
+        <Text style={{ color: C.mute, marginTop: 8 }}>{emptyMsg}</Text>
+      ) : groups.map((cat, i) => (
+        <Pressable
+          key={cat.name}
+          style={[styles.catRow, i < groups.length - 1 && styles.catDivider]}
+          onPress={() => router.push(
+            `/category-detail?category=${encodeURIComponent(cat.name)}&dateFrom=${dateFrom}&dateTo=${dateTo}` as any
+          )}
+        >
+          <View style={styles.catIcon}><Text style={{ fontSize: 16 }}>{cat.icon}</Text></View>
+          <Text style={styles.catName}>{cat.name}</Text>
+          <Text style={styles.catTotal}>-{currency.symbol}{formatSmartMoney(cat.total)}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: C.paper, paddingBottom: tabBarReserve }}>
@@ -195,42 +222,28 @@ export default function ReportsScreen() {
             <View style={styles.totalsRow}>
               <View style={[styles.totalCard, { backgroundColor: C.purpleSoft }]}>
                 <Text style={styles.totalLabel}>DAY TOTAL</Text>
-                <Text style={[styles.totalValue, { color: C.purpleDark }]}>{currency.symbol}{formatMoney(daySpent)}</Text>
+                <Text style={[styles.totalValue, { color: C.purpleDark }]}>{currency.symbol}{formatSmartMoney(daySpent)}</Text>
               </View>
             </View>
-            <View style={{ marginTop: 20, paddingHorizontal: 20 }}>
-              {dayList.length === 0 ? (
-                <Text style={{ color: C.mute, marginTop: 8 }}>No expenses on this day.</Text>
-              ) : dayList.map((t) => (
-                <Pressable key={t.id} onPress={() => router.push('/add-edit?id=' + t.id)} style={styles.dayRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.txCat}>{t.note || t.category}</Text>
-                    <View style={{ flexDirection: 'row', marginTop: 4 }}>
-                      {(t.tags || []).slice(0, 2).map((tag, j) => <Chip key={j}>#{tag}</Chip>)}
-                    </View>
-                  </View>
-                  <Text style={styles.txAmt}>{currency.symbol}{formatMoney(t.amount)}</Text>
-                </Pressable>
-              ))}
-            </View>
+            {renderCatGroups(dayGroups, toISODate(dayDate), toISODate(dayDate), 'No expenses on this day.')}
           </>
         )}
 
         {activeTab === 'Week' && (
           <>
             <View style={styles.stepper}>
-              <Pressable onPress={() => { setWeekStart(addDays(weekStart, -7)); setSelectedDay(null); setShowAll(false); }}>
+              <Pressable onPress={() => { setWeekStart(addDays(weekStart, -7)); setSelectedDay(null); }}>
                 <Text style={styles.arrow}>←</Text>
               </Pressable>
               <Text style={styles.stepperTitle}>{toShortDate(weekStart)} – {toShortDate(weekEnd)}</Text>
-              <Pressable disabled={atWeekBoundary} onPress={() => { setWeekStart(addDays(weekStart, 7)); setSelectedDay(null); setShowAll(false); }}>
+              <Pressable disabled={atWeekBoundary} onPress={() => { setWeekStart(addDays(weekStart, 7)); setSelectedDay(null); }}>
                 <Text style={[styles.arrow, atWeekBoundary && styles.arrowDisabled]}>→</Text>
               </Pressable>
             </View>
             <View style={styles.totalsRow}>
               <View style={[styles.totalCard, { backgroundColor: C.purpleSoft }]}>
                 <Text style={styles.totalLabel}>WEEK TOTAL</Text>
-                <Text style={[styles.totalValue, { color: C.purpleDark }]}>{currency.symbol}{formatMoney(weekSpent)}</Text>
+                <Text style={[styles.totalValue, { color: C.purpleDark }]}>{currency.symbol}{formatSmartMoney(weekSpent)}</Text>
               </View>
               <View style={{ width: 10 }} />
               <View style={styles.totalCard}>
@@ -248,7 +261,7 @@ export default function ReportsScreen() {
                   <Pressable
                     key={i}
                     style={[styles.weekDayTile, isSel && { backgroundColor: C.purple, borderColor: C.purple }, !isSel && isToday && { backgroundColor: C.purpleSoft, borderColor: C.purple }]}
-                    onPress={() => { setSelectedDay(day); setShowAll(false); }}
+                    onPress={() => setSelectedDay(day)}
                   >
                     <Text style={[styles.weekDayName, isSel && { color: C.onPurple }, !isSel && isToday && { color: C.purpleDark }]}>
                       {day.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}
@@ -256,38 +269,12 @@ export default function ReportsScreen() {
                     <Text style={[styles.weekDayNum, isSel && { color: C.onPurple }, !isSel && isToday && { color: C.purpleDark }]}>
                       {day.getDate()}
                     </Text>
-                    {amt > 0 && <Text style={[styles.weekDayAmt, isSel && { color: C.onPurple }]}>{currency.symbol}{Math.round(amt)}</Text>}
+                    {amt > 0 && <View style={[styles.weekDayDot, isSel && { backgroundColor: C.onPurple }]} />}
                   </Pressable>
                 );
               })}
             </View>
-            {selectedList && selectedDay && (
-              <View style={{ marginTop: 20, paddingHorizontal: 20 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <Text style={styles.dayTitle}>{selectedDay.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</Text>
-                  <Text style={styles.dayTotal}>{currency.symbol}{formatMoney(sumAmount(selectedList))}</Text>
-                </View>
-                {selectedList.length > 5 && !showAll && (
-                  <Pressable onPress={() => setShowAll(true)} style={{ marginTop: 8, alignSelf: 'flex-start' }}>
-                    <Text style={{ color: C.purpleDark, fontWeight: '700', fontSize: 13 }}>Show all transactions ({selectedList.length})</Text>
-                  </Pressable>
-                )}
-                {selectedList.length === 0 ? (
-                  <Text style={{ color: C.mute, marginTop: 8 }}>No expenses that day.</Text>
-                ) : displayedList!.map((t) => (
-                  <Pressable key={t.id} onPress={() => router.push('/add-edit?id=' + t.id)} style={styles.dayRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.txCat}>{t.note || t.category}</Text>
-                      <View style={{ flexDirection: 'row', marginTop: 4 }}>
-                        {(t.tags || []).slice(0, 2).map((tag, j) => <Chip key={j}>#{tag}</Chip>)}
-                      </View>
-                    </View>
-                    <Text style={styles.txAmt}>{currency.symbol}{formatMoney(t.amount)}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-            {!selectedList && <Text style={styles.hint}>✎  tap a day to drill in</Text>}
+            {renderCatGroups(weekGroups, toISODate(weekStart), toISODate(weekEnd), 'No expenses this week.')}
           </>
         )}
 
@@ -302,13 +289,12 @@ export default function ReportsScreen() {
               enableSwipeMonths={true}
               hideExtraDays={true}
               maxDate={toISODate(today)}
-              theme={calendarTheme}
               style={{ marginHorizontal: 8, marginTop: 12 }}
             />
             <View style={styles.totalsRow}>
               <View style={[styles.totalCard, { backgroundColor: C.purpleSoft }]}>
                 <Text style={styles.totalLabel}>MONTH TOTAL</Text>
-                <Text style={[styles.totalValue, { color: C.purpleDark }]}>{currency.symbol}{formatMoney(monthSpent)}</Text>
+                <Text style={[styles.totalValue, { color: C.purpleDark }]}>{currency.symbol}{formatSmartMoney(monthSpent)}</Text>
               </View>
               <View style={{ width: 10 }} />
               <View style={styles.totalCard}>
@@ -316,33 +302,7 @@ export default function ReportsScreen() {
                 <Text style={styles.totalValue}>{deltaPct >= 0 ? '+' : ''}{deltaPct}%  {deltaPct >= 0 ? '↑' : '↓'}</Text>
               </View>
             </View>
-            {selectedList && selectedDay && (
-              <View style={{ marginTop: 20, paddingHorizontal: 20 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <Text style={styles.dayTitle}>{selectedDay.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</Text>
-                  <Text style={styles.dayTotal}>{currency.symbol}{formatMoney(sumAmount(selectedList))}</Text>
-                </View>
-                {selectedList.length > 5 && !showAll && (
-                  <Pressable onPress={() => setShowAll(true)} style={{ marginTop: 8, alignSelf: 'flex-start' }}>
-                    <Text style={{ color: C.purpleDark, fontWeight: '700', fontSize: 13 }}>Show all transactions ({selectedList.length})</Text>
-                  </Pressable>
-                )}
-                {selectedList.length === 0 ? (
-                  <Text style={{ color: C.mute, marginTop: 8 }}>No expenses that day.</Text>
-                ) : displayedList!.map((t) => (
-                  <Pressable key={t.id} onPress={() => router.push('/add-edit?id=' + t.id)} style={styles.dayRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.txCat}>{t.note || t.category}</Text>
-                      <View style={{ flexDirection: 'row', marginTop: 4 }}>
-                        {(t.tags || []).slice(0, 2).map((tag, j) => <Chip key={j}>#{tag}</Chip>)}
-                      </View>
-                    </View>
-                    <Text style={styles.txAmt}>{currency.symbol}{formatMoney(t.amount)}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-            {!selectedList && <Text style={styles.hint}>✎  tap a day to drill in</Text>}
+            {renderCatGroups(monthGroups, monthFirstDay, monthLastDay, 'No expenses this month.')}
           </>
         )}
 
@@ -358,7 +318,7 @@ export default function ReportsScreen() {
             <View style={styles.totalsRow}>
               <View style={[styles.totalCard, { backgroundColor: C.purpleSoft }]}>
                 <Text style={styles.totalLabel}>YEAR TOTAL</Text>
-                <Text style={[styles.totalValue, { color: C.purpleDark }]}>{currency.symbol}{formatMoney(yearSpent)}</Text>
+                <Text style={[styles.totalValue, { color: C.purpleDark }]}>{currency.symbol}{formatSmartMoney(yearSpent)}</Text>
               </View>
             </View>
             <View style={styles.yearGrid}>
@@ -368,7 +328,7 @@ export default function ReportsScreen() {
                   <Pressable
                     key={m}
                     style={[styles.yearCell, isCurrent && { backgroundColor: C.purpleSoft }]}
-                    onPress={() => { setCursor(new Date(yearNum, m, 1)); setActiveTab('Month'); setSelectedDay(null); setShowAll(false); }}
+                    onPress={() => { setCursor(new Date(yearNum, m, 1)); setActiveTab('Month'); setSelectedDay(null); }}
                   >
                     <Text style={styles.yearMonth}>{label}</Text>
                     <Text style={[styles.yearAmt, total === 0 && { color: C.mute }]}>
@@ -398,20 +358,19 @@ const makeStyles = (C: Colors) => StyleSheet.create({
   totalsRow: { flexDirection: 'row', paddingHorizontal: 20, marginTop: 16 },
   totalCard: { flex: 1, padding: 10, borderWidth: 1.5, borderColor: C.ink, borderRadius: 12, backgroundColor: C.white },
   totalLabel: { fontSize: 9, color: C.mute, letterSpacing: 1, fontWeight: '700' },
-  totalValue: { fontSize: 22, fontWeight: '800', color: C.ink, marginTop: 2 },
+  totalValue: { fontSize: 18, fontWeight: '800', color: C.ink, marginTop: 2 },
   weekStrip: { flexDirection: 'row', paddingHorizontal: 20, marginTop: 14, gap: 4 },
   weekDayTile: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: C.line },
   weekDayName: { fontSize: 9, fontWeight: '700', color: C.mute, letterSpacing: 0.5 },
   weekDayNum: { fontSize: 16, fontWeight: '800', color: C.ink, marginTop: 2 },
-  weekDayAmt: { fontSize: 8, fontWeight: '700', color: C.purpleDark, marginTop: 2 },
+  weekDayDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.purpleDark, marginTop: 4 },
   yearGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, marginTop: 14, gap: 10 },
   yearCell: { width: '47%', padding: 12, borderWidth: 1.5, borderColor: C.ink, borderRadius: 12, backgroundColor: C.white },
   yearMonth: { fontSize: 11, fontWeight: '700', color: C.mute, letterSpacing: 1 },
   yearAmt: { fontSize: 20, fontWeight: '800', color: C.ink, marginTop: 4 },
-  dayTitle: { fontSize: 20, fontWeight: '800', color: C.ink },
-  dayTotal: { fontSize: 20, fontWeight: '800', color: C.purpleDark },
-  dayRow: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.line, borderStyle: 'dashed' },
-  txCat: { fontSize: 14, fontWeight: '700', color: C.ink },
-  txAmt: { fontSize: 18, fontWeight: '800', color: C.ink },
-  hint: { color: C.purpleDark, fontWeight: '600', paddingHorizontal: 20, marginTop: 12, fontSize: 13 },
+  catRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 4 },
+  catDivider: { borderBottomWidth: 1, borderBottomColor: C.line, borderStyle: 'dashed' },
+  catIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.purpleSoft, borderWidth: 1.25, borderColor: C.ink, alignItems: 'center', justifyContent: 'center' },
+  catName: { flex: 1, fontSize: 14, fontWeight: '700', color: C.ink },
+  catTotal: { fontSize: 16, fontWeight: '800', color: C.ink },
 });

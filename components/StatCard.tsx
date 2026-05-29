@@ -52,7 +52,7 @@ const makeStyles = (C: Colors) => StyleSheet.create({
     backgroundColor: C.white,
   },
   label: { fontSize: 9, color: C.mute, letterSpacing: 1, fontWeight: '700' },
-  value: { fontSize: 17, fontWeight: '800', color: C.ink, marginTop: 2 },
+  value: { fontSize: 15, fontWeight: '800', color: C.ink, marginTop: 2 },
   backdrop: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center', alignItems: 'center',

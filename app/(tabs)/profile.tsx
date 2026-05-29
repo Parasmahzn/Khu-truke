@@ -21,7 +21,7 @@ import LegalModal from "../../components/LegalModal";
 import { useExpenses } from "../../hooks/useExpenses";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { useBudget } from "../../hooks/useBudget";
-import { formatMoney } from "../../utils/expenses";
+import { formatSmartMoney } from "../../utils/expenses";
 import {
   sanitizeAmountInput,
   sanitizeUserNameInput,
@@ -373,6 +373,7 @@ export default function ProfileScreen() {
   };
 
   const pickImage = () => {
+    console.log("Current profile image:", profileImage);
     if (profileImage) {
       Alert.alert('Profile Photo', 'What would you like to do?', [
         { text: 'View Photo',          onPress: () => setImageViewOpen(true) },
@@ -384,9 +385,9 @@ export default function ProfileScreen() {
       return;
     }
     Alert.alert('Profile Photo', 'Add a profile photo', [
+      { text: 'Cancel',              style: 'cancel' },
       { text: 'Take Photo',          onPress: launchCamera },
       { text: 'Choose from Gallery', onPress: launchGallery },
-      { text: 'Cancel',              style: 'cancel' },
     ]);
   };
 
@@ -480,7 +481,7 @@ export default function ProfileScreen() {
             {budget > 0 ? (
               <Text style={styles.budgetAmount}>
                 {currency.symbol}
-                {formatMoney(budget)}
+                {formatSmartMoney(budget)}
               </Text>
             ) : (
               <Text style={styles.budgetNotSet}>Not set</Text>

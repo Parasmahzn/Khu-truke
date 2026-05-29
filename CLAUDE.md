@@ -16,7 +16,7 @@ App is named **Khu₹truke**. npm package name is `khutruke`.
 - **Navigation**: Expo Router (file-based routing) — Stack + bottom tabs with a fully custom floating tab bar (center FAB); built on React Navigation v6 internally
 - **State management**: Zustand — store split into slices (`store/slices/`), composed in `store/index.ts`. Screens access state via `hooks/` only — never import `useAppStore` directly in screens. Persisted via AsyncStorage and expo-secure-store. No backend, local-first.
 - **Styling**: StyleSheet API (NativeWind is NOT used in this project)
-- **Charts**: react-native-chart-kit + react-native-svg (donut/pie, bar, line charts)
+- **Charts**: react-native-gifted-charts (animated line chart) + react-native-svg (custom SVG donut charts)
 - **Type safety**: TypeScript strict mode — `tsconfig.json` extends `expo/tsconfig.base`
 - **Image handling**: expo-image-picker (receipt capture), expo-file-system (backup file I/O)
 - **File sharing**: expo-sharing (export backup), expo-document-picker (import backup)
@@ -230,6 +230,7 @@ import { CURRENCIES, DEFAULT_CATEGORIES, CATEGORY_COLORS, COMMON_TAGS } from '..
 | `currencies.ts` | `CURRENCIES` — the fixed list of 5 supported Currency objects |
 | `categories.ts` | `DEFAULT_CATEGORIES` — the default built-in expense categories; `EMOJI_SUGGESTIONS` — 7 emoji picker suggestions; `CATEGORY_COLORS` — hex colors keyed by category name |
 | `tags.ts` | `COMMON_TAGS` — 6 pre-defined tag strings |
+| `charts.ts` | `DONUT_SEGMENT_COLORS` — 5-color palette (purple, blue, red, green, brown) shared by both donut charts; `CHART_CATEGORY_COLORS` — per-category hex map; `CHART_CUSTOM_PALETTE` — fallback palette for custom categories |
 
 Store-private storage keys (`LEGACY_BUDGET_KEY`, `LEGACY_EXPENSES_KEY`, etc.) stay in `store/index.ts` — they are implementation details, not shared constants.
 
@@ -248,9 +249,9 @@ Each chart type is its own component; `AnalyticsScreen` composes them rather tha
 
 | File | Renders |
 |---|---|
-| `CategoryPieChart.tsx` | react-native-chart-kit PieChart for category breakdown |
-| `DayDonutChart.tsx` | Custom SVG donut (react-native-svg) for per-day spending; owns `DAY_COLORS`, `polarToCartesian`, `arcPath` helpers |
-| `MonthLineChart.tsx` | react-native-chart-kit LineChart for 6-month trend; owns `selectedPoint` state |
+| `CategoryDonutChart.tsx` | Custom SVG donut (react-native-svg) — top 4 categories + Others; segment tap fades non-selected arcs via per-segment `Animated.Value`; entry spring on `active` prop |
+| `DayDonutChart.tsx` | Custom SVG donut (react-native-svg) — top 4 spend days + Others; same interaction pattern as `CategoryDonutChart` |
+| `MonthLineChart.tsx` | react-native-gifted-charts `LineChart` — animated line draw on mount (`isAnimated`), Y-axis compact labels, `pointerConfig` floating tooltip on tap; no custom animation code |
 
 ### Theming (`theme.ts` + `context/ThemeContext.tsx`)
 

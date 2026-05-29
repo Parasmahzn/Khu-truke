@@ -12,7 +12,8 @@ Built with Expo SDK 54 + TypeScript, targeting iOS and Android.
 - **expo-updates** — OTA force-update check on every launch
 - **@react-native-async-storage/async-storage** — persists expenses (namespaced per currency), categories, and profile flags
 - **expo-secure-store** — stores sensitive values (budget, profile image URI, dark mode preference)
-- **react-native-chart-kit** + **react-native-svg** — pie, bar, line, and custom donut charts on the Analytics screen
+- **react-native-gifted-charts** — animated line chart (6-month trend) with built-in pointer tooltip on the Analytics screen
+- **react-native-svg** — custom SVG donut charts (category + day breakdowns) on the Analytics screen
 - **react-native-safe-area-context** — proper iOS notch / Android system navigation bar handling
 - **expo-image-picker** — receipt capture from camera or photo library
 - **expo-file-system** (v19 `File`/`Paths` API) — backup file read/write
@@ -49,7 +50,7 @@ eas build --profile testing --platform android   # internal distribution APK
 | 3 | **Home** | `(tabs)/index` | Budget hero card, quick stats (today / week / daily avg with tooltip), recent + all expenses toggle. |
 | 4 | **Reports** | `(tabs)/reports` | Calendar month grid with per-day spending heatmap. Tap a day to drill in. |
 | 5 | **Add / Edit** | `add-edit` | Amount input (comma-formatted, max 999,999), category strip, note, tag chips, receipt scan/upload. Edit mode adds delete. |
-| 6 | **Analytics** | `(tabs)/analytics` | Swipeable category pie + day donut chart, line chart (6-month trend), category trend cards. |
+| 6 | **Analytics** | `(tabs)/analytics` | Swipeable slider: category donut + day donut + animated line chart (6-month trend). Tap segments/points for interactive highlights. Category trend cards below. |
 | 7 | **Profile** | `(tabs)/profile` | Avatar (tap for action sheet: view/take/gallery/remove), username editing (pencil icon), monthly budget editor (hidden-input, tap to open keyboard), dark mode toggle, currency switcher, CSV export, logout. |
 | 8 | **Manage Categories** | `manage-categories` | Manage custom categories, clear data per currency. |
 | 9 | **Backup & Restore** | `backup-restore` | Export full state as `.json`; import and restore on any device. |
@@ -174,9 +175,9 @@ Khu₹truke/
 │   ├── CustomTabBar.tsx           # floating tab bar with center FAB (safe-area aware)
 │   ├── ScreenHeader.tsx           # large title + purple underline (safe-area aware)
 │   ├── StatCard.tsx               # small stat tile (supports tooltip modal)
-│   ├── CategoryPieChart.tsx       # pie chart — category breakdown
-│   ├── DayDonutChart.tsx          # SVG donut chart — per-day spending
-│   ├── MonthLineChart.tsx         # line chart — 6-month trend
+│   ├── CategoryDonutChart.tsx     # custom SVG donut — category breakdown (top 4 + Others)
+│   ├── DayDonutChart.tsx          # custom SVG donut — per-day spending (top 4 + Others)
+│   ├── MonthLineChart.tsx         # animated line chart — 6-month trend (react-native-gifted-charts)
 │   ├── Logo.tsx                   # ₹ squircle logo mark
 │   ├── Chip.tsx                   # tag pill (pressable or static)
 │   └── LegalModal.tsx             # reusable legal/info modal

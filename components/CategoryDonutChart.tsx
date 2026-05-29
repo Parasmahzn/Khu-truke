@@ -5,7 +5,6 @@ import { useColors } from '../context/ThemeContext';
 import { DONUT_SEGMENT_COLORS } from '../constants';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
-const MAX_SEGMENTS = 5;
 
 function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = (angleDeg - 90) * (Math.PI / 180);
@@ -21,9 +20,16 @@ function arcPath(cx: number, cy: number, outerR: number, innerR: number, startDe
   return `M ${o1.x} ${o1.y} A ${outerR} ${outerR} 0 ${large} 1 ${o2.x} ${o2.y} L ${i2.x} ${i2.y} A ${innerR} ${innerR} 0 ${large} 0 ${i1.x} ${i1.y} Z`;
 }
 
-type Props = { dayTotals: { day: number; total: number }[]; active?: boolean; month?: string };
+function trunc(s: string, n: number) {
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+}
 
-export default function DayDonutChart({ dayTotals, active = false, month }: Props) {
+type Entry = { name: string; value: number; color: string };
+type Props = { data: Entry[]; active?: boolean };
+
+const MAX_SEGMENTS = 5;
+
+export default function CategoryDonutChart({ data, active = false }: Props) {
   const C = useColors();
   const anim = useRef(new Animated.Value(0)).current;
   const segmentOpacityAnims = useRef(
@@ -51,7 +57,7 @@ export default function DayDonutChart({ dayTotals, active = false, month }: Prop
     }
   };
 
-  if (dayTotals.length === 0) {
+  if (data.length === 0) {
     return (
       <View style={{ height: 160, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ color: C.mute }}>No expenses this month yet.</Text>
@@ -59,17 +65,17 @@ export default function DayDonutChart({ dayTotals, active = false, month }: Prop
     );
   }
 
-  const sorted = [...dayTotals].sort((a, b) => b.total - a.total);
+  const sorted = [...data].sort((a, b) => b.value - a.value);
   const top4 = sorted.slice(0, 4);
   const rest = sorted.slice(4);
-  const otherTotal = rest.reduce((s, d) => s + d.total, 0);
+  const otherTotal = rest.reduce((s, d) => s + d.value, 0);
 
   const segments = [
-    ...top4.map((d, i) => ({ label: month ? `${month} ${d.day}` : `Day ${d.day}`, total: d.total, color: DONUT_SEGMENT_COLORS[i] })),
-    ...(otherTotal > 0 ? [{ label: 'Others', total: otherTotal, color: DONUT_SEGMENT_COLORS[4] }] : []),
+    ...top4.map((d, i) => ({ name: d.name, value: d.value, color: DONUT_SEGMENT_COLORS[i] })),
+    ...(otherTotal > 0 ? [{ name: 'Others', value: otherTotal, color: DONUT_SEGMENT_COLORS[4] }] : []),
   ];
 
-  const total = segments.reduce((s, d) => s + d.total, 0);
+  const total = segments.reduce((s, d) => s + d.value, 0);
   if (total === 0) return null;
 
   const size = 160;
@@ -92,7 +98,7 @@ export default function DayDonutChart({ dayTotals, active = false, month }: Prop
         <G>
           {segments.map((d, i) => {
             const isSelected = selectedIndex === i;
-            const sweep = (d.total / total) * 360;
+            const sweep = (d.value / total) * 360;
             const thisOuterR = isSelected ? outerR + 7 : outerR;
             const path = arcPath(cx, cy, thisOuterR, innerR, angle, angle + sweep - 0.5);
             angle += sweep;
@@ -109,10 +115,10 @@ export default function DayDonutChart({ dayTotals, active = false, month }: Prop
           {selectedIndex !== null ? (
             <>
               <SvgText x={cx} y={cy - 6} textAnchor="middle" fontSize="14" fontWeight="800" fill={C.ink}>
-                {Math.round(segments[selectedIndex].total).toLocaleString('en-US')}
+                {Math.round(segments[selectedIndex].value).toLocaleString('en-US')}
               </SvgText>
               <SvgText x={cx} y={cy + 10} textAnchor="middle" fontSize="8" fill={C.mute}>
-                {segments[selectedIndex].label.toUpperCase()}
+                {trunc(segments[selectedIndex].name.toUpperCase(), 9)}
               </SvgText>
             </>
           ) : (
@@ -129,11 +135,11 @@ export default function DayDonutChart({ dayTotals, active = false, month }: Prop
       </Svg>
       <View style={{ flex: 1, paddingLeft: 12 }}>
         {segments.map((d, i) => {
-          const pct = Math.round((d.total / total) * 100);
+          const pct = Math.round((d.value / total) * 100);
           const isSelected = selectedIndex === i;
           return (
             <View
-              key={d.label}
+              key={d.name}
               style={{
                 flexDirection: 'row', alignItems: 'center', marginBottom: 9,
                 paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
@@ -141,8 +147,8 @@ export default function DayDonutChart({ dayTotals, active = false, month }: Prop
               }}
             >
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: d.color, marginRight: 8 }} />
-              <Text style={{ flex: 1, fontSize: 11, color: C.ink, fontWeight: isSelected ? '800' : '600' }}>
-                {d.label}
+              <Text style={{ flex: 1, fontSize: 11, color: C.ink, fontWeight: isSelected ? '800' : '600' }} numberOfLines={1}>
+                {d.name}
               </Text>
               <Text style={{ fontSize: 11, fontWeight: '700', color: isSelected ? C.purpleDark : C.mute, minWidth: 34, textAlign: 'right' }}>
                 {pct}%

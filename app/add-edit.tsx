@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import Logo from '../components/Logo';
 import Chip from '../components/Chip';
+import Calendar from '../components/Calendar';
+import { Ionicons } from '@expo/vector-icons';
 import { useExpenses } from '../hooks/useExpenses';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { useCategories } from '../hooks/useCategories';
@@ -44,6 +46,14 @@ export default function AddEditScreen() {
   const [receipt, setReceipt] = useState<string | null>(existing?.receipt ?? null);
   const [paymentType, setPaymentType] = useState<string>(existing?.paymentType ?? 'Cash');
   const [saving, setSaving] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(
+    existing ? new Date(existing.date) : new Date()
+  );
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const isToday = (d: Date) => {
+    const n = new Date();
+    return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  };
 
   const [addTagOpen, setAddTagOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
@@ -126,7 +136,7 @@ export default function AddEditScreen() {
       note: note.trim(),
       category, icon, tags,
       receipt: receipt || null,
-      date: existing?.date ?? new Date().toISOString(),
+      date: selectedDate.toISOString(),
       paymentType,
     };
     if (isEdit) updateExpense(existing.id, payload);
@@ -163,7 +173,7 @@ export default function AddEditScreen() {
     setNewCatEmoji(''); setNewCatName(''); setNewCatError('');
   };
 
-  const dateStr = new Date(existing?.date ?? Date.now())
+  const dateStr = selectedDate
     .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     .toUpperCase();
 
@@ -251,6 +261,18 @@ export default function AddEditScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.label}>DATE</Text>
+          <Pressable style={styles.dateChip} onPress={() => setShowDatePicker(true)}>
+            <Ionicons name="calendar-outline" size={16} color={C.purple} />
+            <Text style={styles.dateChipText}>
+              {isToday(selectedDate)
+                ? 'Today'
+                : selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.label}>NOTE</Text>
           <View style={styles.inputBox}>
             <TextInput
@@ -318,6 +340,24 @@ export default function AddEditScreen() {
           </Pressable>
         )}
       </ScrollView>
+
+      <Modal visible={showDatePicker} transparent animationType="slide" onRequestClose={() => setShowDatePicker(false)}>
+        <Pressable style={styles.modalBg} onPress={() => setShowDatePicker(false)}>
+          <Pressable style={styles.calendarContainer} onPress={(e) => e.stopPropagation()}>
+            <Calendar
+              current={selectedDate.toISOString().split('T')[0]}
+              maxDate={new Date().toISOString().split('T')[0]}
+              onDayPress={(day) => {
+                setSelectedDate(new Date(day.dateString + 'T12:00:00'));
+                setShowDatePicker(false);
+              }}
+              markedDates={{
+                [selectedDate.toISOString().split('T')[0]]: { selected: true },
+              }}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal visible={addCatOpen} transparent animationType="fade" onRequestClose={closeCatModal}>
         <Pressable style={styles.modalBg} onPress={closeCatModal}>
@@ -501,6 +541,16 @@ const makeStyles = (C: Colors) => StyleSheet.create({
   receiptActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
   receiptActionDivider: { width: 1, backgroundColor: C.line },
   receiptActionLabel: { fontSize: 10, color: C.mute, letterSpacing: 1, fontWeight: '700' },
+  dateChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8,
+    paddingHorizontal: 12, height: 44, borderRadius: 10,
+    borderWidth: 1.5, borderColor: C.ink, backgroundColor: C.white,
+    alignSelf: 'flex-start',
+  },
+  dateChipText: { fontSize: 13, fontWeight: '700', color: C.ink },
+  calendarContainer: {
+    width: '100%', backgroundColor: C.paper, borderRadius: 18, overflow: 'hidden',
+  },
   deleteBtn: {
     marginTop: 28, marginHorizontal: 20, height: 48, borderRadius: 12,
     borderWidth: 1.5, borderColor: C.danger, alignItems: 'center', justifyContent: 'center',

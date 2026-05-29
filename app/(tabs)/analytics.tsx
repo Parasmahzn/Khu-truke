@@ -6,9 +6,9 @@ import { useColors } from '../../context/ThemeContext';
 import { useExpenses } from '../../hooks/useExpenses';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useCategories } from '../../hooks/useCategories';
-import { expensesInMonth, sumAmount, byCategory, formatMoney } from '../../utils/expenses';
+import { expensesInMonth, sumAmount, byCategory, formatMoney, formatSmartMoney } from '../../utils/expenses';
 import { CHART_CATEGORY_COLORS, CHART_CUSTOM_PALETTE } from '../../constants';
-import CategoryPieChart from '../../components/CategoryPieChart';
+import CategoryDonutChart from '../../components/CategoryDonutChart';
 import DayDonutChart from '../../components/DayDonutChart';
 import MonthLineChart from '../../components/MonthLineChart';
 import type { Colors } from '../../theme';
@@ -45,13 +45,14 @@ export default function AnalyticsScreen() {
     return map;
   }, [customCategories]);
 
-  const pieData = cats.map((c) => ({
-    name: c.name,
-    value: c.value,
-    color: colorMap[c.name] ?? CHART_CUSTOM_PALETTE[nameHash(c.name) % CHART_CUSTOM_PALETTE.length],
-    legendFontColor: C.ink,
-    legendFontSize: 11,
-  }));
+  const donutData = useMemo(() =>
+    cats.map((c) => ({
+      name: c.name,
+      value: c.value,
+      color: colorMap[c.name] ?? CHART_CUSTOM_PALETTE[nameHash(c.name) % CHART_CUSTOM_PALETTE.length],
+    })),
+    [cats, colorMap],
+  );
 
   const trends = cats.slice(0, 4).map((c) => {
     const prevVal = prevCatsMap[c.name] ?? 0;
@@ -82,6 +83,7 @@ export default function AnalyticsScreen() {
       .sort((a, b) => a.day - b.day);
   }, [monthList]);
 
+  const monthLabel = now.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
   const tabBarReserve = (Platform.OS === 'ios' ? 96 : 86) + insets.bottom;
 
   return (
@@ -91,8 +93,10 @@ export default function AnalyticsScreen() {
 
         <Text style={styles.label}>
           {chartPage === 0
-            ? `SPENDING BY CATEGORY · ${now.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}`
-            : `SPENDING BY DAY · ${now.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}`}
+            ? `SPENDING BY CATEGORY · ${monthLabel}`
+            : chartPage === 1
+            ? `SPENDING BY DAY · ${monthLabel}`
+            : '6-MONTH TREND'}
         </Text>
         <View style={styles.sliderCard}>
           <ScrollView
@@ -101,20 +105,27 @@ export default function AnalyticsScreen() {
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             scrollEventThrottle={16}
+            onScroll={(e) => {
+              const page = Math.round(e.nativeEvent.contentOffset.x / (width - 43));
+              if (page !== chartPage) setChartPage(page);
+            }}
             onMomentumScrollEnd={(e) => {
               const page = Math.round(e.nativeEvent.contentOffset.x / (width - 43));
               setChartPage(page);
             }}
           >
             <View style={{ width: width - 43, alignItems: 'center', paddingVertical: 12 }}>
-              <CategoryPieChart data={pieData} />
+              <CategoryDonutChart data={donutData} active={chartPage === 0} />
             </View>
             <View style={{ width: width - 43, alignItems: 'center', paddingVertical: 12 }}>
-              <DayDonutChart dayTotals={dayTotals} />
+              <DayDonutChart dayTotals={dayTotals} active={chartPage === 1} month={now.toLocaleDateString('en-US', { month: 'short' })} />
+            </View>
+            <View style={{ width: width - 43, paddingVertical: 12 }}>
+              <MonthLineChart data={last6Months} currencySymbol={currency.symbol} />
             </View>
           </ScrollView>
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, paddingBottom: 10, marginTop: 4 }}>
-            {[0, 1].map((i) => (
+            {[0, 1, 2].map((i) => (
               <View
                 key={i}
                 style={{
@@ -129,18 +140,13 @@ export default function AnalyticsScreen() {
         <View style={styles.totalRow}>
           <View style={[styles.totalCard, { backgroundColor: C.purpleSoft }]}>
             <Text style={styles.totalLabel}>MONTH TOTAL</Text>
-            <Text style={[styles.totalValue, { color: C.purpleDark }]}>{currency.symbol}{formatMoney(monthSpent)}</Text>
+            <Text style={[styles.totalValue, { color: C.purpleDark }]}>{currency.symbol}{formatSmartMoney(monthSpent)}</Text>
           </View>
           <View style={{ width: 10 }} />
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>LAST MONTH</Text>
-            <Text style={styles.totalValue}>{currency.symbol}{formatMoney(prevSpent)}</Text>
+            <Text style={styles.totalValue}>{currency.symbol}{formatSmartMoney(prevSpent)}</Text>
           </View>
-        </View>
-
-        <Text style={[styles.label, { marginTop: 20 }]}>6-MONTH TREND</Text>
-        <View style={styles.chartWrap}>
-          <MonthLineChart data={last6Months} currencySymbol={currency.symbol} />
         </View>
 
         <Text style={[styles.sectionTitle, { marginTop: 24 }]}>vs last month</Text>
@@ -171,18 +177,14 @@ const makeStyles = (C: Colors) => StyleSheet.create({
   label: { fontSize: 10, color: C.mute, letterSpacing: 1.5, fontWeight: '700', paddingHorizontal: 20, marginTop: 10 },
   sliderCard: {
     marginTop: 12, marginHorizontal: 20,
+    backgroundColor: C.paper,
     borderWidth: 1.5, borderColor: C.ink, borderRadius: 16, overflow: 'hidden',
     shadowColor: C.ink, shadowOpacity: 1, shadowOffset: { width: 2, height: 2 }, shadowRadius: 0, elevation: 4,
-  },
-  chartWrap: {
-    alignItems: 'center', marginTop: 12, marginHorizontal: 20,
-    borderWidth: 1.5, borderColor: C.ink, borderRadius: 16, paddingVertical: 12, overflow: 'hidden',
-    shadowColor: C.ink, shadowOpacity: 1, shadowOffset: { width: 2, height: 2 }, shadowRadius: 0,
   },
   totalRow: { flexDirection: 'row', marginTop: 14, paddingHorizontal: 20 },
   totalCard: { flex: 1, padding: 10, borderWidth: 1.5, borderColor: C.ink, borderRadius: 12, backgroundColor: C.white },
   totalLabel: { fontSize: 9, color: C.mute, letterSpacing: 1, fontWeight: '700' },
-  totalValue: { fontSize: 22, fontWeight: '800', color: C.ink, marginTop: 2 },
+  totalValue: { fontSize: 18, fontWeight: '800', color: C.ink, marginTop: 2 },
   sectionTitle: { fontSize: 22, fontWeight: '800', color: C.ink, paddingHorizontal: 20 },
   trendGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, marginTop: 10, gap: 10 },
   trendCard: { width: '48%', padding: 12, borderWidth: 1.5, borderColor: C.ink, borderRadius: 12, backgroundColor: C.white, minHeight: 88 },
