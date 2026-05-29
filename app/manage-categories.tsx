@@ -1,15 +1,16 @@
-import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Modal, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
-import { useAppStore } from '../store';
-import type { Category } from '../store';
-import { CURRENCIES, EMOJI_SUGGESTIONS } from '../constants';
+import { useCategories } from '../hooks/useCategories';
+import type { Category } from '../types';
+import { EMOJI_SUGGESTIONS } from '../constants';
 import { useColors } from '../context/ThemeContext';
 import { useRouter } from 'expo-router';
 import { RADIUS } from '../theme';
 import type { Colors } from '../theme';
+
 export default function SettingsScreen() {
   const router = useRouter();
   const C = useColors();
@@ -18,9 +19,7 @@ export default function SettingsScreen() {
   const {
     customCategories, addCustomCategory, removeCustomCategory, updateCustomCategory,
     builtInCategories, updateBuiltInCategory, removeBuiltInCategory,
-    currency, expenses, clearExpensesForCurrency, clearBudgetForCurrency, countExpensesForCurrency,
-  } = useAppStore();
-
+  } = useCategories();
   const [addCatOpen, setAddCatOpen] = useState(false);
   const [editCatOpen, setEditCatOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Category | null>(null);
@@ -30,39 +29,6 @@ export default function SettingsScreen() {
   const [newCatError, setNewCatError] = useState('');
   const nameInputRef = useRef<TextInput>(null);
   const emojiInputRef = useRef<TextInput>(null);
-  const [counts, setCounts] = useState<Record<string, number>>({});
-
-  const refreshCounts = useCallback(async () => {
-    const entries = await Promise.all(
-      CURRENCIES.map(async (c) => {
-        if (c.code === currency.code) return [c.code, expenses.length] as const;
-        const n = await countExpensesForCurrency(c.code);
-        return [c.code, n] as const;
-      })
-    );
-    setCounts(Object.fromEntries(entries));
-  }, [currency.code, expenses.length, countExpensesForCurrency]);
-
-  useEffect(() => { refreshCounts(); }, [refreshCounts]);
-
-  const onClearCurrency = (c: typeof CURRENCIES[number]) => {
-    const n = counts[c.code] ?? 0;
-    Alert.alert(
-      `Clear all ${c.code} data?`,
-      `This will delete ${n} expense${n === 1 ? '' : 's'} and reset the ${c.code} budget. Other currencies are not affected. This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear', style: 'destructive',
-          onPress: async () => {
-            await clearExpensesForCurrency(c.code);
-            await clearBudgetForCurrency(c.code);
-            refreshCounts();
-          },
-        },
-      ]
-    );
-  };
 
   const saveNewCategory = () => {
     if (!newCatName.trim()) { setNewCatError('Enter a category name'); return; }
@@ -130,7 +96,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: C.paper }}>
-      <ScreenHeader title="Settings" />
+      <ScreenHeader title="Manage Categories" />
       <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
         <Ionicons name="chevron-back" size={20} color={C.purple} />
         <Text style={styles.backText}>Back</Text>
@@ -148,9 +114,6 @@ export default function SettingsScreen() {
               </View>
               <Pressable onPress={() => openEdit(cat, true)} style={styles.editBtn}>
                 <Ionicons name="pencil" size={14} color={C.purpleDark} />
-              </Pressable>
-              <Pressable onPress={() => onRemove(cat, true)} style={styles.removeBtn}>
-                <Ionicons name="close" size={14} color={C.danger} />
               </Pressable>
             </View>
           ))}
@@ -181,38 +144,6 @@ export default function SettingsScreen() {
               </View>
             ))
           )}
-        </View>
-
-        <Text style={[styles.sectionLabel, styles.dangerLabel]}>CLEAR DATA BY CURRENCY</Text>
-        <Text style={styles.dangerHint}>
-          Each currency has its own expenses and budget. Clearing a currency
-          removes only that currency's data — your profile and other currencies stay intact.
-        </Text>
-        <View style={[styles.listCard, styles.dangerCard]}>
-          {CURRENCIES.map((c, i) => {
-            const n = counts[c.code] ?? 0;
-            const isActive = c.code === currency.code;
-            return (
-              <View key={c.code} style={[styles.curRow, i < CURRENCIES.length - 1 && styles.catDivider]}>
-                <Text style={styles.curSymbol}>{c.symbol}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.curCode}>
-                    {c.code}
-                    {isActive && <Text style={styles.curActive}>  · active</Text>}
-                  </Text>
-                  <Text style={styles.curMeta}>{n} expense{n === 1 ? '' : 's'}</Text>
-                </View>
-                <Pressable
-                  onPress={() => onClearCurrency(c)}
-                  disabled={n === 0}
-                  style={[styles.clearBtn, n === 0 && styles.clearBtnDisabled]}
-                >
-                  <Ionicons name="trash-outline" size={13} color={n === 0 ? C.mute : C.danger} style={{ marginRight: 4 }} />
-                  <Text style={[styles.clearBtnText, n === 0 && styles.clearBtnTextDisabled]}>clear</Text>
-                </Pressable>
-              </View>
-            );
-          })}
         </View>
 
       </ScrollView>
@@ -247,30 +178,21 @@ export default function SettingsScreen() {
               </View>
             </View>
             {newCatError ? <Text style={styles.errText}>{newCatError}</Text> : null}
-
             <Text style={styles.modalSubLabel}>SUGGESTIONS</Text>
             <View style={styles.emojiGrid}>
               {EMOJI_SUGGESTIONS.map((e) => (
-                <Pressable
-                  key={e}
-                  style={[styles.emojiCell, newCatEmoji === e && styles.emojiCellActive]}
-                  onPress={() => { setNewCatEmoji(e); nameInputRef.current?.focus(); }}
-                >
+                <Pressable key={e} style={[styles.emojiCell, newCatEmoji === e && styles.emojiCellActive]}
+                  onPress={() => { setNewCatEmoji(e); nameInputRef.current?.focus(); }}>
                   <Text style={{ fontSize: 16 }}>{e}</Text>
                 </Pressable>
               ))}
               <Pressable
-                style={[
-                  styles.emojiCell, styles.emojiCellCustom,
-                  !!newCatEmoji && !EMOJI_SUGGESTIONS.includes(newCatEmoji) && styles.emojiCellActive,
-                ]}
-                onPress={() => emojiInputRef.current?.focus()}
-              >
+                style={[styles.emojiCell, styles.emojiCellCustom, !!newCatEmoji && !EMOJI_SUGGESTIONS.includes(newCatEmoji) && styles.emojiCellActive]}
+                onPress={() => emojiInputRef.current?.focus()}>
                 <Ionicons name="pencil" size={14} color={C.purple} />
               </Pressable>
             </View>
             <Text style={styles.customHint}>tap the pencil to type any emoji from your keyboard</Text>
-
             <View style={styles.modalBtns}>
               <Pressable style={[styles.modalBtn, styles.modalBtnGhost]} onPress={closeEdit}>
                 <Text style={styles.ghostBtnText}>Cancel</Text>
@@ -289,54 +211,32 @@ export default function SettingsScreen() {
             <Text style={styles.modalTitle}>New Category</Text>
             <View style={styles.newCatRow}>
               <View style={styles.emojiBox}>
-                <TextInput
-                  ref={emojiInputRef}
-                  value={newCatEmoji}
-                  onChangeText={(v) => setNewCatEmoji(v)}
-                  placeholder="😀"
-                  placeholderTextColor={C.mute}
-                  style={styles.emojiInput}
-                  maxLength={4}
-                />
+                <TextInput ref={emojiInputRef} value={newCatEmoji} onChangeText={(v) => setNewCatEmoji(v)}
+                  placeholder="😀" placeholderTextColor={C.mute} style={styles.emojiInput} maxLength={4} />
               </View>
               <View style={[styles.nameBox, !!newCatError && { borderColor: C.danger }]}>
-                <TextInput
-                  ref={nameInputRef}
-                  value={newCatName}
+                <TextInput ref={nameInputRef} value={newCatName}
                   onChangeText={(v) => { setNewCatName(v); setNewCatError(''); }}
-                  placeholder="Category name"
-                  placeholderTextColor={C.mute}
-                  style={styles.nameInput}
-                  returnKeyType="done"
-                  onSubmitEditing={saveNewCategory}
-                />
+                  placeholder="Category name" placeholderTextColor={C.mute} style={styles.nameInput}
+                  returnKeyType="done" onSubmitEditing={saveNewCategory} />
               </View>
             </View>
             {newCatError ? <Text style={styles.errText}>{newCatError}</Text> : null}
-
             <Text style={styles.modalSubLabel}>SUGGESTIONS</Text>
             <View style={styles.emojiGrid}>
               {EMOJI_SUGGESTIONS.map((e) => (
-                <Pressable
-                  key={e}
-                  style={[styles.emojiCell, newCatEmoji === e && styles.emojiCellActive]}
-                  onPress={() => { setNewCatEmoji(e); nameInputRef.current?.focus(); }}
-                >
+                <Pressable key={e} style={[styles.emojiCell, newCatEmoji === e && styles.emojiCellActive]}
+                  onPress={() => { setNewCatEmoji(e); nameInputRef.current?.focus(); }}>
                   <Text style={{ fontSize: 16 }}>{e}</Text>
                 </Pressable>
               ))}
               <Pressable
-                style={[
-                  styles.emojiCell, styles.emojiCellCustom,
-                  !!newCatEmoji && !EMOJI_SUGGESTIONS.includes(newCatEmoji) && styles.emojiCellActive,
-                ]}
-                onPress={() => emojiInputRef.current?.focus()}
-              >
+                style={[styles.emojiCell, styles.emojiCellCustom, !!newCatEmoji && !EMOJI_SUGGESTIONS.includes(newCatEmoji) && styles.emojiCellActive]}
+                onPress={() => emojiInputRef.current?.focus()}>
                 <Ionicons name="pencil" size={14} color={C.purple} />
               </Pressable>
             </View>
             <Text style={styles.customHint}>tap the pencil to type any emoji from your keyboard</Text>
-
             <View style={styles.modalBtns}>
               <Pressable style={[styles.modalBtn, styles.modalBtnGhost]} onPress={closeCatModal}>
                 <Text style={styles.ghostBtnText}>Cancel</Text>
@@ -391,16 +291,4 @@ const makeStyles = (C: Colors) => StyleSheet.create({
   ghostBtnText: { color: C.ink, fontWeight: '700' },
   modalBtnPrimary: { backgroundColor: C.purple },
   primaryBtnText: { color: C.onPurple, fontWeight: '800' },
-  dangerLabel: { color: C.danger, marginTop: 32 },
-  dangerHint: { fontSize: 11, color: C.mute, paddingHorizontal: 20, marginTop: 6, marginBottom: 4, lineHeight: 15 },
-  dangerCard: { borderColor: C.danger, marginTop: 8 },
-  curRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 56 },
-  curSymbol: { fontSize: 18, fontWeight: '800', color: C.ink, width: 36, textAlign: 'center' },
-  curCode: { fontSize: 14, fontWeight: '700', color: C.ink },
-  curActive: { fontSize: 11, fontWeight: '600', color: C.purpleDark },
-  curMeta: { fontSize: 11, color: C.mute, marginTop: 2 },
-  clearBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1.5, borderColor: C.danger, borderRadius: 999, backgroundColor: C.white },
-  clearBtnDisabled: { borderColor: C.line, backgroundColor: C.white },
-  clearBtnText: { fontSize: 12, fontWeight: '700', color: C.danger },
-  clearBtnTextDisabled: { color: C.mute },
 });

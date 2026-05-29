@@ -1,3 +1,11 @@
+export const DONUT_SEGMENT_COLORS: string[] = [
+  '#7c3aed', // purple (app primary)
+  '#3b82f6', // blue
+  '#ef4444', // red
+  '#22c55e', // green
+  '#92400e', // brown
+];
+
 export const CHART_CATEGORY_COLORS: Record<string, string> = {
   Bills:     '#ef4444',
   Coffee:    '#b45309',

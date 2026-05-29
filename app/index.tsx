@@ -3,9 +3,11 @@ import { Alert } from 'react-native';
 import { Redirect } from 'expo-router';
 import * as Updates from 'expo-updates';
 import { useAppStore } from '../store';
+import { useUserProfile } from '../hooks/useUserProfile';
 
 export default function Index() {
-  const { ready, isUserConfigured, onboarded } = useAppStore();
+  const ready = useAppStore((s) => s.ready);
+  const { isUserConfigured, onboarded } = useUserProfile();
 
   useEffect(() => {
     async function checkUpdate() {

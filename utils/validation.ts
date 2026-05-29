@@ -1,5 +1,17 @@
 export const AMOUNT_MIN = 0.01;
 export const AMOUNT_MAX = 999_999;
+export const USER_NAME_MAX = 40;
+
+export const sanitizeUserNameInput = (v: string): string =>
+  v.replace(/[^a-zA-Z\s'-]/g, '');
+
+export const validateUserName = (name: string): string | null => {
+  const t = name.trim();
+  if (!t) return 'Name is required';
+  if (t.length < 2) return 'Name must be at least 2 characters';
+  if (t.length > USER_NAME_MAX) return `Name must be ${USER_NAME_MAX} characters or less`;
+  return null;
+};
 
 export function sanitizeAmountInput(raw: string): string {
   let s = raw.replace(/[^0-9.]/g, '');
